@@ -1,6 +1,6 @@
 # Raspberry Pi Satellite Rotator
 
-Current release: **v0.1.0**
+Current release: **v0.2.0**
 
 Raspberry Pi Zero 2 W controller for a two-axis antenna rotator using EasyComm over TCP. The intended hardware is an L298N dual DC motor driver and a WitMotion WT901-series angle sensor.
 

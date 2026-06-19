@@ -52,6 +52,22 @@ std::string request(std::uint16_t port, std::string_view method, std::string_vie
     ::close(socket);
     return response;
 }
+
+int open_stalled_client(std::uint16_t port) {
+    const int socket = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (socket < 0) {
+        throw std::runtime_error("stalled-client socket failed");
+    }
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    ::inet_pton(AF_INET, "127.0.0.1", &address.sin_addr);
+    if (::connect(socket, reinterpret_cast<sockaddr*>(&address), sizeof(address)) != 0) {
+        ::close(socket);
+        throw std::runtime_error("stalled-client connection failed");
+    }
+    return socket;
+}
 }
 
 int main() {
@@ -66,6 +82,8 @@ int main() {
     std::thread web_thread([&] { web.run(stopping); });
     std::this_thread::sleep_for(150ms);
 
+    const int stalled_client = open_stalled_client(easycomm_port);
+
     const auto page = request(web_port, "GET", "/");
     require(page.find("200 OK") != std::string::npos, "serve control page");
     require(page.find("Satellite Rotator") != std::string::npos, "page title");
@@ -73,6 +91,8 @@ int main() {
     const auto initial = request(web_port, "GET", "/api/status");
     require(initial.find("\"azimuth\":0.0") != std::string::npos, "initial azimuth");
     require(initial.find("\"elevation\":0.0") != std::string::npos, "initial elevation");
+    require(initial.find("\"ok\":true") != std::string::npos,
+            "web proxy works while another EasyComm client is idle");
 
     require(request(web_port, "POST", "/api/move?az=123.4&el=45.6").find("200 OK") !=
                 std::string::npos,
@@ -96,6 +116,7 @@ int main() {
     require(request(web_port, "POST", "/api/stop").find("200 OK") != std::string::npos,
             "stop endpoint");
 
+    ::close(stalled_client);
     stopping.store(true);
     easycomm_thread.join();
     web_thread.join();

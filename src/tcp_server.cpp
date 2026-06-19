@@ -5,11 +5,16 @@
 #include <cerrno>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 
 namespace rotator {
 namespace {
@@ -44,7 +49,9 @@ std::string execute(std::string_view line, RotatorController& controller) {
             controller.stop();
             return {};
         case CommandKind::zero:
-            controller.zero_current_position();
+            if (!controller.zero_current_position()) {
+                return "ERR stop motion and obtain valid feedback before zeroing\r\n";
+            }
             return "OK ZERO\r\n";
         case CommandKind::park: {
             std::string error;
@@ -59,10 +66,37 @@ std::string execute(std::string_view line, RotatorController& controller) {
     return "ERR invalid command\r\n";
 }
 
-void serve_client(int client, RotatorController& controller) {
+void configure_client(int client) {
+    const int enabled = 1;
+    ::setsockopt(client, SOL_SOCKET, SO_KEEPALIVE, &enabled, sizeof(enabled));
+    const int keep_idle_seconds = 30;
+    const int keep_interval_seconds = 10;
+    const int keep_count = 3;
+    ::setsockopt(client, IPPROTO_TCP, TCP_KEEPIDLE, &keep_idle_seconds,
+                 sizeof(keep_idle_seconds));
+    ::setsockopt(client, IPPROTO_TCP, TCP_KEEPINTVL, &keep_interval_seconds,
+                 sizeof(keep_interval_seconds));
+    ::setsockopt(client, IPPROTO_TCP, TCP_KEEPCNT, &keep_count, sizeof(keep_count));
+    timeval send_timeout{.tv_sec = 2, .tv_usec = 0};
+    ::setsockopt(client, SOL_SOCKET, SO_SNDTIMEO, &send_timeout, sizeof(send_timeout));
+}
+
+void serve_client(int client, RotatorController& controller, std::atomic_bool& stopping) {
+    configure_client(client);
     std::string pending;
     char buffer[512];
-    while (true) {
+    while (!stopping.load()) {
+        fd_set sockets;
+        FD_ZERO(&sockets);
+        FD_SET(client, &sockets);
+        timeval timeout{.tv_sec = 1, .tv_usec = 0};
+        const int ready = ::select(client + 1, &sockets, nullptr, nullptr, &timeout);
+        if (ready == 0 || (ready < 0 && errno == EINTR)) {
+            continue;
+        }
+        if (ready < 0) {
+            return;
+        }
         const auto count = ::recv(client, buffer, sizeof(buffer), 0);
         if (count <= 0) {
             return;
@@ -79,6 +113,23 @@ void serve_client(int client, RotatorController& controller) {
             if (!response.empty() && !send_all(client, response)) {
                 return;
             }
+        }
+    }
+}
+
+struct ClientWorker {
+    std::thread thread;
+    std::shared_ptr<std::atomic_bool> complete;
+};
+
+void reap_clients(std::vector<ClientWorker>& clients, bool join_all = false) {
+    auto client = clients.begin();
+    while (client != clients.end()) {
+        if (join_all || client->complete->load()) {
+            client->thread.join();
+            client = clients.erase(client);
+        } else {
+            ++client;
         }
     }
 }
@@ -109,7 +160,9 @@ int TcpServer::run(std::atomic_bool& stopping) {
     }
 
     std::cout << "EasyComm simulator listening on TCP port " << port_ << '\n';
+    std::vector<ClientWorker> clients;
     while (!stopping.load()) {
+        reap_clients(clients);
         fd_set sockets;
         FD_ZERO(&sockets);
         FD_SET(server, &sockets);
@@ -122,12 +175,20 @@ int TcpServer::run(std::atomic_bool& stopping) {
         if (ready > 0) {
             const int client = ::accept(server, nullptr, nullptr);
             if (client >= 0) {
-                serve_client(client, controller_);
-                ::close(client);
+                auto complete = std::make_shared<std::atomic_bool>(false);
+                clients.push_back(ClientWorker{
+                    .thread = std::thread([client, this, &stopping, complete] {
+                        serve_client(client, controller_, stopping);
+                        ::close(client);
+                        complete->store(true);
+                    }),
+                    .complete = std::move(complete),
+                });
             }
         }
     }
     ::close(server);
+    reap_clients(clients, true);
     return 0;
 }
 

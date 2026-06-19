@@ -1,5 +1,6 @@
 #include "rotator/rotator.hpp"
 
+#include <algorithm>
 #include <cmath>
 
 namespace rotator {
@@ -66,8 +67,11 @@ void RotatorController::stop() {
     state_.moving = false;
 }
 
-void RotatorController::zero_current_position() {
+bool RotatorController::zero_current_position() {
     std::lock_guard lock(mutex_);
+    if (state_.moving || (external_feedback_ && !feedback_received_)) {
+        return false;
+    }
     motion_commanded_ = false;
     if (external_feedback_) {
         feedback_zero_.azimuth = raw_feedback_.azimuth;
@@ -77,6 +81,7 @@ void RotatorController::zero_current_position() {
     state_.elevation = 0.0;
     state_.moving = false;
     target_ = state_;
+    return true;
 }
 
 void RotatorController::enable_external_feedback() {
@@ -93,13 +98,16 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
     std::lock_guard lock(mutex_);
     raw_feedback_.azimuth = azimuth;
     raw_feedback_.elevation = elevation;
+    feedback_received_ = true;
     const double mapped_azimuth = normalize_azimuth(azimuth - feedback_zero_.azimuth);
     const double mapped_elevation = elevation - feedback_zero_.elevation;
-    if (mapped_elevation < 0.0 || mapped_elevation > 180.0) {
+    constexpr double boundary_tolerance = 1.0;
+    if (mapped_elevation < -boundary_tolerance ||
+        mapped_elevation > 180.0 + boundary_tolerance) {
         return false;
     }
     state_.azimuth = mapped_azimuth;
-    state_.elevation = mapped_elevation;
+    state_.elevation = std::clamp(mapped_elevation, 0.0, 180.0);
     update_motion_state_locked();
     return true;
 }

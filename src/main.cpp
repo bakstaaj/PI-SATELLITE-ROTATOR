@@ -132,7 +132,9 @@ void read_sensor(rotator::SerialPort port, const Options& options,
         rotator::WitFrameDecoder decoder;
         rotator::WitSample sample;
         std::array<std::uint8_t, 256> bytes{};
-        bool warned_elevation = false;
+        std::size_t dropped_elevation_frames = 0;
+        bool elevation_mapping_valid = true;
+        auto next_mapping_warning = std::chrono::steady_clock::now();
         while (!stopping.load()) {
             const auto count = port.read(bytes, std::chrono::milliseconds(200));
             for (const auto& frame : decoder.push(std::span(bytes).first(count))) {
@@ -150,10 +152,21 @@ void read_sensor(rotator::SerialPort port, const Options& options,
                     options.elevation_sign *
                         sample.angle_degrees[static_cast<std::size_t>(options.elevation_axis)] +
                     options.elevation_offset;
-                if (!controller.update_feedback(azimuth, elevation) && !warned_elevation) {
-                    std::cerr << "WT901 elevation mapping is outside 0-180 degrees; "
-                                 "check --el-axis, --el-offset, and --el-invert\n";
-                    warned_elevation = true;
+                if (!controller.update_feedback(azimuth, elevation)) {
+                    ++dropped_elevation_frames;
+                    elevation_mapping_valid = false;
+                    const auto now = std::chrono::steady_clock::now();
+                    if (now >= next_mapping_warning) {
+                        std::cerr << "WT901 elevation mapping is outside 0-180 degrees; dropped "
+                                  << dropped_elevation_frames
+                                  << " frame(s). Check --el-axis, --el-offset, and --el-invert\n";
+                        dropped_elevation_frames = 0;
+                        next_mapping_warning = now + std::chrono::seconds(10);
+                    }
+                } else if (!elevation_mapping_valid) {
+                    std::cerr << "WT901 elevation mapping recovered\n";
+                    elevation_mapping_valid = true;
+                    dropped_elevation_frames = 0;
                 }
             }
         }

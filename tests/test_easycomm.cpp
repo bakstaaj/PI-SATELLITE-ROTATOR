@@ -25,6 +25,8 @@ int main() {
     require(parse_easycomm("ZERO").kind == CommandKind::zero, "zero command");
     require(parse_easycomm("PARK").kind == CommandKind::park, "park command");
     require(parse_easycomm("AZnope").kind == CommandKind::invalid, "reject malformed value");
+    require(parse_easycomm("AZ1 AZ2").error == "duplicate axis token",
+            "identify duplicate axis token");
 
     RotatorController controller;
     std::string error;
@@ -40,12 +42,25 @@ int main() {
     controller.stop();
     require(!controller.position().moving, "stop clears motion state");
     require(!controller.update_feedback(120.0, 181.0), "reject invalid feedback");
-    controller.zero_current_position();
+    require(controller.zero_current_position(), "zero stopped controller");
     require(controller.position().azimuth == 0.0 && controller.position().elevation == 0.0,
             "zero current position");
     require(controller.update_feedback(130.0, 40.0), "feedback after zero");
     require(controller.position().azimuth == 10.0 && controller.position().elevation == 5.0,
             "zero offsets external feedback");
+    require(controller.set_target(140.0, 45.0, error), "set moving target before zero test");
+    require(!controller.zero_current_position(), "reject zero while moving");
+    controller.stop();
+    require(controller.zero_current_position(), "allow zero after stop");
+
+    RotatorController boundary_controller;
+    boundary_controller.enable_external_feedback();
+    require(!boundary_controller.zero_current_position(), "reject zero before first feedback");
+    require(boundary_controller.update_feedback(10.0, 10.0), "seed boundary feedback");
+    require(boundary_controller.zero_current_position(), "zero boundary controller");
+    require(boundary_controller.update_feedback(10.0, 9.5), "tolerate elevation noise at zero");
+    require(boundary_controller.position().elevation == 0.0, "clamp boundary noise to zero");
+    require(!boundary_controller.update_feedback(10.0, 8.5), "reject material boundary error");
 
     std::cout << "All tests passed\n";
     return 0;

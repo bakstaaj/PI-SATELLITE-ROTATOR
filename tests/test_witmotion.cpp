@@ -64,6 +64,15 @@ int main() {
     corrupted[10] ^= 0x01;
     require(decoder.push(corrupted).empty(), "reject bad checksum");
 
+    auto noisy_corrupted = angle_bytes;
+    noisy_corrupted[4] = 0x55;
+    noisy_corrupted[10] ^= 0x01;
+    std::array<std::uint8_t, 22> resync_stream{};
+    std::copy(noisy_corrupted.begin(), noisy_corrupted.end(), resync_stream.begin());
+    std::copy(angle_bytes.begin(), angle_bytes.end(), resync_stream.begin() + 11);
+    const auto recovered_frames = decoder.push(resync_stream);
+    require(recovered_frames.size() == 1, "resynchronize after spurious header byte");
+
     std::array<std::uint8_t, 14> noisy{};
     noisy[0] = 0x12;
     noisy[1] = 0x55;

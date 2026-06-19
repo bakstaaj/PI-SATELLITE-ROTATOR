@@ -75,8 +75,12 @@ Command parse_easycomm(std::string_view line) {
             return {CommandKind::invalid, std::nullopt, std::nullopt,
                     "unsupported token: " + token};
         }
+        if (*destination) {
+            return {CommandKind::invalid, std::nullopt, std::nullopt,
+                    "duplicate axis token"};
+        }
         double value = 0.0;
-        if (*destination || !parse_number(number, value)) {
+        if (!parse_number(number, value)) {
             return {CommandKind::invalid, std::nullopt, std::nullopt,
                     "invalid axis value"};
         }

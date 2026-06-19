@@ -28,7 +28,7 @@ http://PI_ADDRESS:8080/
 - **Move** sends `AZaaa.a ELbbb.b` through EasyComm.
 - **Jog** calculates a new target from the latest EasyComm position and sends a normal move command.
 - **Stop** sends `SA SE`.
-- **Zero here** sends `ZERO`; the current feedback becomes 0 degrees azimuth and 0 degrees elevation for this process lifetime.
+- **Zero here** sends `ZERO`; the current feedback becomes 0 degrees azimuth and 0 degrees elevation for this process lifetime. Zeroing is rejected while motion is commanded or before the first live feedback sample; press **Stop** first.
 - **Park 0/0** sends `PARK`, which requests azimuth 0 and elevation 0.
 - Position cards poll `AZ EL` through EasyComm every 750 milliseconds.
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(pi_satellite_rotator VERSION 0.1.0 LANGUAGES CXX)
+project(pi_satellite_rotator VERSION 0.2.0 LANGUAGES CXX)
 
 include(CTest)
 

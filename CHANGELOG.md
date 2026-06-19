@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.2.0 - 2026-06-19
+
+- Allow concurrent persistent EasyComm clients so tracking software and the web UI cannot block each other.
+- Add TCP keepalive, bounded sends, clean client shutdown, and completed-worker cleanup.
+- Reject `ZERO` while motion is commanded or before live feedback is available.
+- Tolerate and clamp up to one degree of elevation noise at the 0/180 boundaries.
+- Report rejected WT901 mappings periodically and announce recovery.
+- Improve duplicate EasyComm axis-token diagnostics and clarify CRLF response framing.
+- Add regression coverage for idle concurrent clients, safe zeroing, boundary noise, and noisy-frame resynchronization.
+
 ## v0.1.0 - 2026-06-18
 
 Initial working software baseline:

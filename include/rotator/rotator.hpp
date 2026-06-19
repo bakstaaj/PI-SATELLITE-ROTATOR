@@ -19,7 +19,7 @@ public:
                     std::string& error);
     Position position() const;
     void stop();
-    void zero_current_position();
+    bool zero_current_position();
     void enable_external_feedback();
     bool update_feedback(double azimuth, double elevation);
 
@@ -32,6 +32,7 @@ private:
     Position raw_feedback_;
     Position feedback_zero_;
     bool external_feedback_{false};
+    bool feedback_received_{false};
     bool motion_commanded_{false};
 };
 

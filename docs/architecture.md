@@ -25,6 +25,6 @@ The controller never derives antenna position from motor runtime, belt ratio, or
 - `ZERO` captures the current feedback position as azimuth 0 and elevation 0.
 - `PARK` requests azimuth 0 and elevation 0.
 
-Commands and responses are terminated by LF; CRLF is accepted. The initial TCP implementation serves one connected client at a time.
+Commands may be terminated by LF or CRLF. Responses use CRLF. The TCP service handles concurrent persistent clients, allowing tracking software and the web control proxy to remain connected at the same time.
 
 The integrated HTTP server listens on port 8080. Its API does not access `RotatorController` directly: every status or control operation opens a TCP connection to `127.0.0.1:4553` and sends the corresponding EasyComm command. This keeps browser testing on the same protocol path used by external tracking software.

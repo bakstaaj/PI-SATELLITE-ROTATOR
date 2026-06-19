@@ -194,6 +194,12 @@ std::string connect_easycomm(const std::string& host, std::uint16_t port,
     return response;
 }
 
+void require_easycomm_ok(std::string_view response) {
+    if (response.starts_with("ERR")) {
+        throw std::runtime_error(std::string(response));
+    }
+}
+
 std::optional<double> query_number(std::string_view target, std::string_view key) {
     const auto question = target.find('?');
     if (question == std::string_view::npos) {
@@ -286,12 +292,12 @@ void handle_request(int client, const HttpRequest& request, const std::string& h
             return;
         }
         if (request.method == "POST" && request.target == "/api/zero") {
-            connect_easycomm(host, port, "ZERO\n", true);
+            require_easycomm_ok(connect_easycomm(host, port, "ZERO\n", true));
             http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }
         if (request.method == "POST" && request.target == "/api/park") {
-            connect_easycomm(host, port, "PARK\n", true);
+            require_easycomm_ok(connect_easycomm(host, port, "PARK\n", true));
             http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }
