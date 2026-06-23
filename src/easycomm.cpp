@@ -49,6 +49,9 @@ Command parse_easycomm(std::string_view line) {
     if (text == "PARK") {
         return {CommandKind::park, std::nullopt, std::nullopt, {}};
     }
+    if (text == "STATUS") {
+        return {CommandKind::status, std::nullopt, std::nullopt, {}};
+    }
 
     std::istringstream input(text);
     std::vector<std::string> tokens;

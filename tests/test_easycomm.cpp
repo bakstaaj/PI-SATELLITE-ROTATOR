@@ -1,9 +1,11 @@
 #include "rotator/easycomm.hpp"
 #include "rotator/rotator.hpp"
 
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <string>
+#include <thread>
 
 namespace {
 void require(bool condition, const std::string& message) {
@@ -16,11 +18,14 @@ void require(bool condition, const std::string& message) {
 
 int main() {
     using namespace rotator;
+    using namespace std::chrono_literals;
+
     const auto set = parse_easycomm("AZ123.4 EL45.6\r\n");
     require(set.kind == CommandKind::set_position, "set command kind");
     require(set.azimuth == 123.4 && set.elevation == 45.6, "set values");
 
     require(parse_easycomm("AZ EL").kind == CommandKind::query_position, "position query");
+    require(parse_easycomm("STATUS").kind == CommandKind::status, "status command");
     require(parse_easycomm("SA SE").kind == CommandKind::stop, "stop command");
     require(parse_easycomm("ZERO").kind == CommandKind::zero, "zero command");
     require(parse_easycomm("PARK").kind == CommandKind::park, "park command");
@@ -35,7 +40,13 @@ int main() {
     require(!controller.set_target(std::nullopt, -0.1, error), "reject negative elevation");
     require(format_position(12.34, 5.67) == "AZ12.3 EL5.7\r\n", "format response");
 
+    const auto simulator_status = controller.status();
+    require(!simulator_status.external_feedback, "simulator reports no external feedback");
+    require(simulator_status.target_azimuth == 359.0, "status reports target azimuth");
+
     controller.enable_external_feedback();
+    require(!controller.set_target(125.0, 35.0, error),
+            "reject external motion before feedback");
     require(controller.update_feedback(120.0, 35.0), "accept external feedback");
     require(controller.set_target(125.0, 35.0, error), "set external target");
     require(controller.position().moving, "external target reports motion needed");
@@ -53,6 +64,17 @@ int main() {
     controller.stop();
     require(controller.zero_current_position(), "allow zero after stop");
 
+    RotatorController stale_controller;
+    stale_controller.enable_external_feedback();
+    stale_controller.set_feedback_timeout(10ms);
+    require(stale_controller.update_feedback(20.0, 20.0), "seed stale feedback test");
+    require(!stale_controller.status().feedback_stale, "fresh feedback is not stale");
+    std::this_thread::sleep_for(25ms);
+    require(stale_controller.status().feedback_stale, "feedback becomes stale");
+    require(stale_controller.status().fault, "stale feedback reports fault");
+    require(!stale_controller.set_target(25.0, 25.0, error),
+            "reject target when feedback is stale");
+
     RotatorController boundary_controller;
     boundary_controller.enable_external_feedback();
     require(!boundary_controller.zero_current_position(), "reject zero before first feedback");
@@ -61,6 +83,10 @@ int main() {
     require(boundary_controller.update_feedback(10.0, 9.5), "tolerate elevation noise at zero");
     require(boundary_controller.position().elevation == 0.0, "clamp boundary noise to zero");
     require(!boundary_controller.update_feedback(10.0, 8.5), "reject material boundary error");
+    require(boundary_controller.status().fault_reason == "mapped elevation outside 0-180 degrees",
+            "report rejected feedback reason");
+    require(boundary_controller.position().elevation == 0.0,
+            "rejected feedback does not update position");
 
     std::cout << "All tests passed\n";
     return 0;

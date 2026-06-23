@@ -8,11 +8,11 @@ The controller is split so protocol and safety logic can be tested without energ
 4. Hardware adapters will own GPIO/PWM, limit switches, and the WT901 serial stream.
 5. A safety supervisor will stop both axes on stale sensor data, travel-limit violation, process shutdown, or control timeout.
 
-The current implementation includes steps 1 and 2, simulator mode, the WT901 binary protocol decoder, USB serial transport, calibration utility, and live angle feedback in the EasyComm service. GPIO motor output remains disabled until the mounted sensor axis mapping is measured and verified.
+The current implementation includes steps 1 and 2, simulator mode, the WT901 binary protocol decoder, USB serial transport, calibration utility, live angle feedback in the EasyComm service, status/fault reporting, and stale-feedback protection. GPIO motor output remains disabled until the mounted sensor axis mapping is measured and verified.
 
 ## Planned control loop
 
-The motion loop should run independently of TCP clients at a fixed rate. Each axis will use signed angular error, a deadband, ramped PWM, and braking/coasting behavior selected during bench testing. Azimuth is a bounded 0–359 degree axis, not an assumed continuously rotating axis; shortest-path movement must account for cable and hard-stop constraints.
+The motion loop should run independently of TCP clients at a fixed rate. Each axis will use signed angular error, a deadband, ramped PWM, and braking/coasting behavior selected during bench testing. Azimuth is a bounded 0-359 degree axis, not an assumed continuously rotating axis; shortest-path movement must account for cable and hard-stop constraints.
 
 The controller never derives antenna position from motor runtime, belt ratio, or motor revolutions. Hall modules establish the two physical home references; the WT901 supplies all continuous azimuth/elevation feedback. At home, the controller will capture the sensor-to-mechanism offsets and use them until the next homing cycle.
 
@@ -21,6 +21,7 @@ The controller never derives antenna position from motor runtime, belt ratio, or
 - `AZ123.4 EL45.6` sets both targets.
 - `AZ123.4` or `EL45.6` sets one target.
 - `AZ EL`, `AZ`, or `EL` queries the current position. The service returns `AZ123.4 EL45.6`.
+- `STATUS` returns a non-standard JSON status object for the integrated web UI and diagnostics.
 - `SA`, `SE`, `SA SE`, or `STOP` stops motion.
 - `ZERO` captures the current feedback position as azimuth 0 and elevation 0.
 - `PARK` requests azimuth 0 and elevation 0.

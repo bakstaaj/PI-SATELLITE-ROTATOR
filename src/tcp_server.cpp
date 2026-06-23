@@ -4,8 +4,10 @@
 
 #include <cerrno>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <utility>
@@ -31,6 +33,42 @@ bool send_all(int socket, const std::string& message) {
     return true;
 }
 
+std::string json_escape(std::string_view value) {
+    std::string result;
+    for (const char c : value) {
+        if (c == '"' || c == '\\') {
+            result.push_back('\\');
+            result.push_back(c);
+        } else if (c == '\n' || c == '\r') {
+            result.push_back(' ');
+        } else {
+            result.push_back(c);
+        }
+    }
+    return result;
+}
+
+const char* json_bool(bool value) { return value ? "true" : "false"; }
+
+std::string format_status_json(const ControllerStatus& status) {
+    std::ostringstream body;
+    body << std::fixed << std::setprecision(1)
+         << "{\"ok\":true"
+         << ",\"azimuth\":" << status.azimuth
+         << ",\"elevation\":" << status.elevation
+         << ",\"target_azimuth\":" << status.target_azimuth
+         << ",\"target_elevation\":" << status.target_elevation
+         << ",\"moving\":" << json_bool(status.moving)
+         << ",\"external_feedback\":" << json_bool(status.external_feedback)
+         << ",\"feedback_received\":" << json_bool(status.feedback_received)
+         << ",\"feedback_stale\":" << json_bool(status.feedback_stale)
+         << ",\"feedback_age_ms\":" << status.feedback_age_ms
+         << ",\"fault\":" << json_bool(status.fault)
+         << ",\"fault_reason\":\"" << json_escape(status.fault_reason) << "\""
+         << ",\"backend\":\"easycomm\"}\r\n";
+    return body.str();
+}
+
 std::string execute(std::string_view line, RotatorController& controller) {
     const Command command = parse_easycomm(line);
     switch (command.kind) {
@@ -38,16 +76,18 @@ std::string execute(std::string_view line, RotatorController& controller) {
             const Position position = controller.position();
             return format_position(position.azimuth, position.elevation);
         }
+        case CommandKind::status:
+            return format_status_json(controller.status());
         case CommandKind::set_position: {
             std::string error;
             if (!controller.set_target(command.azimuth, command.elevation, error)) {
                 return "ERR " + error + "\r\n";
             }
-            return {};
+            return "OK MOVE\r\n";
         }
         case CommandKind::stop:
             controller.stop();
-            return {};
+            return "OK STOP\r\n";
         case CommandKind::zero:
             if (!controller.zero_current_position()) {
                 return "ERR stop motion and obtain valid feedback before zeroing\r\n";

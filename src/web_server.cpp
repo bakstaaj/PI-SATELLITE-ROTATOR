@@ -62,7 +62,8 @@ const $=id=>document.getElementById(id);let current={azimuth:0,elevation:0},busy
 function sync(a,b){$(a).addEventListener('input',()=>$(b).value=$(a).value);$(b).addEventListener('input',()=>$(a).value=$(b).value)}sync('azTarget','azSlider');sync('elTarget','elSlider');
 function connected(ok,msg){$('status').className='status '+(ok?'online':'offline');$('statusText').textContent=ok?'EasyComm online':'Offline';document.querySelectorAll('[data-control]').forEach(x=>x.disabled=!ok||busy);$('log').textContent=msg||'';$('log').className='log '+(ok?'':'danger')}
 async function api(path,method='GET'){const r=await fetch(path,{method,cache:'no-store'});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||('HTTP '+r.status));return j}
-async function refresh(){try{const j=await api('/api/status');current=j;$('azNow').textContent=j.azimuth.toFixed(1);$('elNow').textContent=j.elevation.toFixed(1);$('azFill').style.width=(j.azimuth/359*100)+'%';$('elFill').style.width=(j.elevation/180*100)+'%';connected(true,'Live position via TCP '+j.backend)}catch(e){connected(false,e.message)}}
+function statusLine(j){if(j.fault)return 'FAULT: '+(j.fault_reason||'unknown');let s=j.moving?'Moving':'Idle';if(j.external_feedback){s+=' | sensor '+(j.feedback_received?(j.feedback_age_ms+' ms old'):'waiting for first frame');}return s+' | backend '+j.backend}
+async function refresh(){try{const j=await api('/api/status');current=j;$('azNow').textContent=j.azimuth.toFixed(1);$('elNow').textContent=j.elevation.toFixed(1);$('azFill').style.width=(j.azimuth/359*100)+'%';$('elFill').style.width=(j.elevation/180*100)+'%';connected(!j.fault,statusLine(j))}catch(e){connected(false,e.message)}}
 async function command(path,label){busy=true;connected(true,label);try{await api(path,'POST');await refresh()}catch(e){connected(false,e.message)}finally{busy=false;document.querySelectorAll('[data-control]').forEach(x=>x.disabled=$('status').classList.contains('offline'))}}
 $('move').onclick=()=>command('/api/move?az='+encodeURIComponent($('azTarget').value)+'&el='+encodeURIComponent($('elTarget').value),'Sending EasyComm target...');
 $('stop').onclick=()=>command('/api/stop','Sending stop...');
@@ -118,10 +119,22 @@ void http_response(int client, int status, std::string_view content_type,
     send_all(client, response.str());
 }
 
+bool wait_readable(int socket, int timeout_seconds) {
+    fd_set sockets;
+    FD_ZERO(&sockets);
+    FD_SET(socket, &sockets);
+    timeval timeout{.tv_sec = timeout_seconds, .tv_usec = 0};
+    const int ready = ::select(socket + 1, &sockets, nullptr, nullptr, &timeout);
+    return ready > 0;
+}
+
 std::optional<HttpRequest> read_request(int client) {
     std::string data;
     char buffer[1024];
     while (data.find("\r\n\r\n") == std::string::npos && data.size() < 8192) {
+        if (!wait_readable(client, 2)) {
+            return std::nullopt;
+        }
         const auto count = ::recv(client, buffer, sizeof(buffer), 0);
         if (count <= 0) {
             return std::nullopt;
@@ -228,24 +241,6 @@ std::optional<double> query_number(std::string_view target, std::string_view key
     return std::nullopt;
 }
 
-std::optional<std::pair<double, double>> parse_position(std::string_view response) {
-    const auto az = response.find("AZ");
-    const auto el = response.find("EL");
-    if (az == std::string_view::npos || el == std::string_view::npos || el <= az + 2) {
-        return std::nullopt;
-    }
-    double azimuth = 0.0;
-    double elevation = 0.0;
-    const auto az_text = response.substr(az + 2, el - (az + 2));
-    const auto el_text = response.substr(el + 2);
-    const auto az_result = std::from_chars(az_text.data(), az_text.data() + az_text.size(), azimuth);
-    const auto el_result = std::from_chars(el_text.data(), el_text.data() + el_text.size(), elevation);
-    if (az_result.ec != std::errc{} || el_result.ec != std::errc{}) {
-        return std::nullopt;
-    }
-    return std::pair{azimuth, elevation};
-}
-
 void api_error(int client, const std::exception& error) {
     http_response(client, 400, "application/json; charset=utf-8",
                   "{\"ok\":false,\"error\":\"" + json_escape(error.what()) + "\"}");
@@ -259,17 +254,11 @@ void handle_request(int client, const HttpRequest& request, const std::string& h
             return;
         }
         if (request.method == "GET" && request.target == "/api/status") {
-            const auto raw = connect_easycomm(host, port, "AZ EL\n", true);
-            const auto position = parse_position(raw);
-            if (!position) {
-                throw std::runtime_error("invalid EasyComm position response");
+            const auto raw = connect_easycomm(host, port, "STATUS\n", true);
+            if (!raw.starts_with("{")) {
+                throw std::runtime_error("invalid EasyComm status response");
             }
-            std::ostringstream body;
-            body << std::fixed << std::setprecision(1)
-                 << "{\"ok\":true,\"azimuth\":" << position->first
-                 << ",\"elevation\":" << position->second << ",\"backend\":\""
-                 << json_escape(host + ':' + std::to_string(port)) << "\"}";
-            http_response(client, 200, "application/json; charset=utf-8", body.str());
+            http_response(client, 200, "application/json; charset=utf-8", raw);
             return;
         }
         if (request.method == "POST" && request.target.starts_with("/api/move?")) {
@@ -282,12 +271,12 @@ void handle_request(int client, const HttpRequest& request, const std::string& h
             std::ostringstream command;
             command << std::fixed << std::setprecision(1) << "AZ" << *azimuth << " EL"
                     << *elevation << '\n';
-            connect_easycomm(host, port, command.str(), false);
+            require_easycomm_ok(connect_easycomm(host, port, command.str(), true));
             http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }
         if (request.method == "POST" && request.target == "/api/stop") {
-            connect_easycomm(host, port, "SA SE\n", false);
+            require_easycomm_ok(connect_easycomm(host, port, "SA SE\n", true));
             http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }

@@ -6,7 +6,7 @@
 
 namespace rotator {
 
-enum class CommandKind { set_position, query_position, stop, zero, park, invalid };
+enum class CommandKind { set_position, query_position, status, stop, zero, park, invalid };
 
 struct Command {
     CommandKind kind{CommandKind::invalid};

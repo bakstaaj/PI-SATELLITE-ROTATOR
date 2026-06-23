@@ -4,6 +4,7 @@
 
 #include <array>
 #include <atomic>
+#include <chrono>
 #include <csignal>
 #include <cstdint>
 #include <exception>
@@ -25,6 +26,7 @@ struct Options {
     bool web_enabled{true};
     std::string sensor_device;
     unsigned int sensor_baud{115200};
+    unsigned int feedback_timeout_ms{1000};
     SensorAxis azimuth_axis{SensorAxis::yaw};
     SensorAxis elevation_axis{SensorAxis::roll};
     double azimuth_offset{0.0};
@@ -98,6 +100,12 @@ Options parse_options(int argc, char** argv) {
                 throw std::invalid_argument("sensor baud rate must be positive");
             }
             options.sensor_baud = static_cast<unsigned int>(value);
+        } else if (argument == "--feedback-timeout-ms" && i + 1 < argc) {
+            const int value = integer(argv[++i], "feedback timeout");
+            if (value <= 0) {
+                throw std::invalid_argument("feedback timeout must be positive");
+            }
+            options.feedback_timeout_ms = static_cast<unsigned int>(value);
         } else if (argument == "--az-axis" && i + 1 < argc) {
             options.azimuth_axis = parse_axis(argv[++i]);
         } else if (argument == "--el-axis" && i + 1 < argc) {
@@ -121,8 +129,9 @@ void print_usage() {
     std::cerr
         << "usage: pi-satellite-rotator [--port PORT] [--sensor DEVICE]\n"
         << "       [--web-port PORT] [--no-web]\n"
-        << "       [--sensor-baud RATE] [--az-axis roll|pitch|yaw]\n"
-        << "       [--el-axis roll|pitch|yaw] [--az-offset DEG] [--el-offset DEG]\n"
+        << "       [--sensor-baud RATE] [--feedback-timeout-ms MS]\n"
+        << "       [--az-axis roll|pitch|yaw] [--el-axis roll|pitch|yaw]\n"
+        << "       [--az-offset DEG] [--el-offset DEG]\n"
         << "       [--az-invert] [--el-invert]\n";
 }
 
@@ -186,6 +195,7 @@ int main(int argc, char** argv) {
         std::signal(SIGTERM, handle_signal);
 
         rotator::RotatorController controller;
+        controller.set_feedback_timeout(std::chrono::milliseconds(options.feedback_timeout_ms));
         std::thread sensor_thread;
         std::thread web_thread;
         if (!options.sensor_device.empty()) {
@@ -194,7 +204,8 @@ int main(int argc, char** argv) {
             sensor_thread = std::thread(read_sensor, std::move(sensor), std::cref(options),
                                         std::ref(controller));
             std::cout << "WT901 input: " << options.sensor_device << " at "
-                      << options.sensor_baud << " baud\n";
+                      << options.sensor_baud << " baud; feedback timeout "
+                      << options.feedback_timeout_ms << " ms\n";
         }
 
         if (options.web_enabled) {

@@ -82,7 +82,7 @@ int main() {
     std::thread web_thread([&] { web.run(stopping); });
     std::this_thread::sleep_for(150ms);
 
-    const int stalled_client = open_stalled_client(easycomm_port);
+    const int stalled_easycomm_client = open_stalled_client(easycomm_port);
 
     const auto page = request(web_port, "GET", "/");
     require(page.find("200 OK") != std::string::npos, "serve control page");
@@ -91,6 +91,10 @@ int main() {
     const auto initial = request(web_port, "GET", "/api/status");
     require(initial.find("\"azimuth\":0.0") != std::string::npos, "initial azimuth");
     require(initial.find("\"elevation\":0.0") != std::string::npos, "initial elevation");
+    require(initial.find("\"target_azimuth\":0.0") != std::string::npos,
+            "initial target azimuth");
+    require(initial.find("\"moving\":false") != std::string::npos,
+            "initial moving state");
     require(initial.find("\"ok\":true") != std::string::npos,
             "web proxy works while another EasyComm client is idle");
 
@@ -116,7 +120,7 @@ int main() {
     require(request(web_port, "POST", "/api/stop").find("200 OK") != std::string::npos,
             "stop endpoint");
 
-    ::close(stalled_client);
+    ::close(stalled_easycomm_client);
     stopping.store(true);
     easycomm_thread.join();
     web_thread.join();
