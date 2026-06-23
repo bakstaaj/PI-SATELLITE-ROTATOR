@@ -78,7 +78,7 @@ else
 fi
 
 if getent group dialout >/dev/null 2>&1; then
-  usermod -a -G dialout "$install_user"
+  usermod -a -G dialout,gpio "$install_user"
   pass "service user added to dialout group"
 else
   pass "dialout group not present; skipped supplementary group assignment"

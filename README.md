@@ -65,3 +65,7 @@ The script is dry-run by default and requires both `--execute` and `--confirm-un
 
 The daemon GPIO backend uses the Raspberry Pi `pinctrl` command, matching the standalone GPIO smoke test. Legacy `/sys/class/gpio` is not required.
 
+### No-motion parking mode
+
+When the hardware is not mechanically assembled, keep WT901 feedback enabled but omit `--motor-backend gpio`. This leaves the service useful for sensor/web/API validation while preventing movement commands from energizing the L298N.
+

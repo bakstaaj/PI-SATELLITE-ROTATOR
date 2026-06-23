@@ -46,3 +46,23 @@ Before enabling `--motor-backend gpio` in the daemon, run the standalone GPIO sm
 
 The daemon GPIO backend uses the Raspberry Pi `pinctrl` command rather than legacy `/sys/class/gpio`. This matches current Raspberry Pi OS behavior and the standalone GPIO smoke test.
 
+## Service permissions
+
+The systemd service runs as the `satrot` user. For normal sensor operation it needs `dialout` access. For the Raspberry Pi `pinctrl` GPIO backend it also needs `gpio` access.
+
+The packaged service should include:
+
+```ini
+SupplementaryGroups=dialout gpio
+```
+
+The installer should also ensure:
+
+```bash
+usermod -a -G dialout,gpio satrot
+```
+
+## No-motion parking mode
+
+When the rotator is not assembled, leave the service in WT901 feedback-only mode by omitting `--motor-backend gpio`. This keeps live feedback and the web/API status available but prevents movement commands from energizing the L298N.
+
