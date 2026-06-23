@@ -34,3 +34,16 @@ AZ120.0 EL35.0
 ```
 
 Read [the architecture](docs/architecture.md), [web control guide](docs/web-control.md), [wiring diagrams](docs/wiring.md), [hardware safety notes](docs/hardware.md), and [WT901 setup and calibration guide](docs/witmotion.md) before adding GPIO support.
+
+
+## Raspberry Pi service install
+
+After building the ARM64 artifacts with `./scripts/build-rpi.sh`, install them on a 64-bit Raspberry Pi OS system with:
+
+```bash
+sudo ./scripts/install-pi.sh --start
+./scripts/validate-pi-install.sh --require-active
+```
+
+The installer creates a `satrot` service user, installs binaries under `/opt/pi-satellite-rotator/bin`, installs a systemd unit, creates `/etc/pi-satellite-rotator/pi-satellite-rotator.env`, and prints the Pi LAN IP address. See [the Raspberry Pi install guide](docs/pi-install.md) for details.
+

@@ -1,0 +1,27 @@
+[Unit]
+Description=Raspberry Pi Satellite Rotator EasyComm Service
+Documentation=https://github.com/bakstaaj/PI-SATELLITE-ROTATOR
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/opt/pi-satellite-rotator/bin/pi-satellite-rotator
+
+[Service]
+Type=simple
+User=satrot
+Group=satrot
+SupplementaryGroups=dialout
+WorkingDirectory=/var/lib/pi-satellite-rotator
+EnvironmentFile=-/etc/pi-satellite-rotator/pi-satellite-rotator.env
+ExecStart=/opt/pi-satellite-rotator/bin/pi-satellite-rotator $PI_SATELLITE_ROTATOR_ARGS
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGTERM
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/pi-satellite-rotator /var/log/pi-satellite-rotator
+
+[Install]
+WantedBy=multi-user.target
