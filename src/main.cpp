@@ -182,11 +182,15 @@ void perform_sensor_action(rotator::SerialPort& port, rotator::SensorAction acti
     switch (action) {
         case rotator::SensorAction::calibrate_accelerometer:
             std::cerr << "WT901 accelerometer calibration requested; keep the sensor level and still\n";
+            controller.begin_sensor_maintenance(std::chrono::seconds(9),
+                                                "accelerometer calibration in progress");
             send_wit_command(port, rotator::wit_unlock_command());
             send_wit_command(port, rotator::wit_accelerometer_calibration_command());
             std::this_thread::sleep_for(std::chrono::milliseconds(5500));
             send_wit_command(port, rotator::wit_unlock_command());
             send_wit_command(port, rotator::wit_save_command());
+            controller.begin_sensor_maintenance(std::chrono::seconds(3),
+                                                "waiting for WT901 feedback after calibration");
             std::cerr << "WT901 accelerometer calibration saved\n";
             break;
         case rotator::SensorAction::magnetic_calibration_start:

@@ -129,6 +129,22 @@ int main() {
     require(boundary_controller.position().elevation == 0.0,
             "rejected feedback does not update position");
 
+    RotatorController maintenance_controller;
+    maintenance_controller.enable_external_feedback();
+    maintenance_controller.set_feedback_timeout(10ms);
+    require(maintenance_controller.update_feedback(30.0, 30.0),
+            "seed maintenance controller");
+    maintenance_controller.begin_sensor_maintenance(100ms,
+                                                    "test sensor maintenance");
+    std::this_thread::sleep_for(25ms);
+    const auto maintenance_status = maintenance_controller.status();
+    require(maintenance_status.feedback_stale, "maintenance feedback can be stale");
+    require(maintenance_status.sensor_maintenance, "sensor maintenance flag is set");
+    require(!maintenance_status.fault,
+            "sensor maintenance suppresses stale fault");
+    require(maintenance_status.sensor_maintenance_reason == "test sensor maintenance",
+            "sensor maintenance reason is reported");
+
     std::cout << "All tests passed\n";
     return 0;
 }

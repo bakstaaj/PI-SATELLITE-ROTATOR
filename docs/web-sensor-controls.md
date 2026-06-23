@@ -25,3 +25,7 @@ SENSOR CALIBRATE MAGNETIC FINISH
 ```
 
 These commands are intended for diagnostics and setup. They do not intentionally command rotator motion.
+
+## Calibration status
+
+During Level/Accel and magnetic calibration command windows, STATUS includes `sensor_maintenance` and `sensor_maintenance_reason`. A temporary stale WT901 frame age during this maintenance window is not treated as a controller fault.

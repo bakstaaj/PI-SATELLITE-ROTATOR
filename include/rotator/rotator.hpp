@@ -37,6 +37,8 @@ struct ControllerStatus {
     std::string motor_backend{"simulator"};
     bool motor_fault{false};
     std::string motor_fault_reason;
+    bool sensor_maintenance{false};
+    std::string sensor_maintenance_reason;
 };
 
 class RotatorController {
@@ -55,12 +57,15 @@ public:
     bool update_feedback(double azimuth, double elevation);
     bool request_sensor_action(SensorAction action, std::string& error);
     std::optional<SensorAction> take_sensor_action();
+    void begin_sensor_maintenance(std::chrono::milliseconds duration,
+                                  std::string reason);
 
 private:
     void update_motion_state_locked();
     void apply_motor_command_locked();
     void stop_motor_locked();
     bool feedback_stale_locked(std::chrono::steady_clock::time_point now) const;
+    bool sensor_maintenance_locked(std::chrono::steady_clock::time_point now) const;
     ControllerStatus status_locked(std::chrono::steady_clock::time_point now) const;
 
     mutable std::mutex mutex_;
@@ -72,6 +77,8 @@ private:
     std::chrono::milliseconds feedback_timeout_{1000};
     std::string last_feedback_error_;
     std::optional<SensorAction> pending_sensor_action_;
+    std::chrono::steady_clock::time_point sensor_maintenance_until_{};
+    std::string sensor_maintenance_reason_;
     std::shared_ptr<MotorDriver> motor_driver_;
     std::string motor_backend_{"simulator"};
     bool external_feedback_{false};

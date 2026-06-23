@@ -60,6 +60,11 @@ bool RotatorController::set_target(std::optional<double> azimuth,
         error = "valid sensor feedback is required before motion commands";
         return false;
     }
+    if (sensor_maintenance_locked(now)) {
+        error = "sensor maintenance in progress";
+        stop_motor_locked();
+        return false;
+    }
     if (feedback_stale_locked(now)) {
         error = "sensor feedback is stale";
         stop_motor_locked();
@@ -104,8 +109,9 @@ void RotatorController::stop() {
 
 bool RotatorController::zero_current_position() {
     std::lock_guard lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
     if (state_.moving || (external_feedback_ && !feedback_received_) ||
-        feedback_stale_locked(std::chrono::steady_clock::now())) {
+        sensor_maintenance_locked(now) || feedback_stale_locked(now)) {
         return false;
     }
     motion_commanded_ = false;
@@ -169,6 +175,19 @@ std::optional<SensorAction> RotatorController::take_sensor_action() {
     return action;
 }
 
+
+void RotatorController::begin_sensor_maintenance(std::chrono::milliseconds duration,
+                                                 std::string reason) {
+    std::lock_guard lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    sensor_maintenance_until_ = now + (duration.count() > 0 ? duration
+                                                             : std::chrono::milliseconds(1000));
+    sensor_maintenance_reason_ = std::move(reason);
+    motion_commanded_ = false;
+    state_.moving = false;
+    stop_motor_locked();
+}
+
 bool RotatorController::update_feedback(double azimuth, double elevation) {
     if (azimuth < 0.0 || azimuth >= 360.0 || elevation < 0.0 || elevation > 180.0) {
         std::lock_guard lock(mutex_);
@@ -190,6 +209,8 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
     raw_feedback_.elevation = elevation;
     feedback_received_ = true;
     last_feedback_time_ = std::chrono::steady_clock::now();
+    sensor_maintenance_until_ = {};
+    sensor_maintenance_reason_.clear();
     last_feedback_error_.clear();
     state_.azimuth = mapped_azimuth;
     state_.elevation = std::clamp(mapped_elevation, 0.0, 180.0);
@@ -251,6 +272,12 @@ bool RotatorController::feedback_stale_locked(
            now - last_feedback_time_ > feedback_timeout_;
 }
 
+bool RotatorController::sensor_maintenance_locked(
+    std::chrono::steady_clock::time_point now) const {
+    return sensor_maintenance_until_ != std::chrono::steady_clock::time_point{} &&
+           now <= sensor_maintenance_until_;
+}
+
 ControllerStatus RotatorController::status_locked(
     std::chrono::steady_clock::time_point now) const {
     ControllerStatus status;
@@ -261,7 +288,12 @@ ControllerStatus RotatorController::status_locked(
     status.external_feedback = external_feedback_;
     status.feedback_received = feedback_received_;
     status.feedback_stale = feedback_stale_locked(now);
-    status.moving = state_.moving && !status.feedback_stale && !motor_fault_;
+    status.sensor_maintenance = sensor_maintenance_locked(now);
+    if (status.sensor_maintenance) {
+        status.sensor_maintenance_reason = sensor_maintenance_reason_;
+    }
+    status.moving = state_.moving && !status.feedback_stale && !motor_fault_ &&
+                    !status.sensor_maintenance;
     status.motor_backend = motor_backend_;
     status.motor_fault = motor_fault_;
     status.motor_fault_reason = motor_fault_reason_;
@@ -270,8 +302,10 @@ ControllerStatus RotatorController::status_locked(
             std::chrono::duration_cast<std::chrono::milliseconds>(now - last_feedback_time_)
                 .count();
     }
-    status.fault = status.feedback_stale || status.motor_fault;
-    if (status.feedback_stale) {
+    status.fault = (status.feedback_stale && !status.sensor_maintenance) || status.motor_fault;
+    if (status.sensor_maintenance) {
+        status.fault_reason.clear();
+    } else if (status.feedback_stale) {
         status.fault_reason = "stale sensor feedback";
     } else if (status.motor_fault) {
         status.fault_reason = "motor backend fault: " + motor_fault_reason_;

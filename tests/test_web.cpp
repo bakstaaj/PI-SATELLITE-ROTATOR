@@ -105,6 +105,8 @@ int main() {
     require(sensor_test.find("200 OK") != std::string::npos, "sensor test endpoint");
     require(sensor_test.find("\"motor_backend\":\"simulator\"") != std::string::npos,
             "sensor test returns status json");
+    require(sensor_test.find("\"sensor_maintenance\":false") != std::string::npos,
+            "sensor test includes maintenance state");
 
     const auto no_sensor_cal = request(web_port, "POST", "/api/sensor/calibrate-accel");
     require(no_sensor_cal.find("400 Bad Request") != std::string::npos,
