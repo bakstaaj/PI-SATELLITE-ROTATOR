@@ -51,3 +51,13 @@ The installer creates a `satrot` service user, installs binaries under `/opt/pi-
 
 The default runtime remains safe simulator mode. Real L298N GPIO output is opt-in with `--motor-backend gpio` and requires `--sensor` so the controller has live WT901 feedback before motion. See [the GPIO motor backend guide](docs/gpio-motor-backend.md).
 
+## GPIO smoke test
+
+Before coupling motors to the antenna rotator, use the Pi-side GPIO smoke test to verify L298N wiring and direction with the motors mechanically unloaded:
+
+```bash
+sudo ./scripts/gpio-smoke-test.sh --execute --confirm-unloaded --axis both --seconds 0.5
+```
+
+The script is dry-run by default and requires both `--execute` and `--confirm-unloaded` before it writes GPIO. See [the GPIO smoke test guide](docs/gpio-smoke-test.md).
+
