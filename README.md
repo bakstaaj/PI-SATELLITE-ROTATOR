@@ -73,3 +73,8 @@ When the hardware is not mechanically assembled, keep WT901 feedback enabled but
 
 The web UI includes Sensor Test, Level/Accel Calibration, and Magnetic Calibration Start/Finish controls. These controls use daemon-side EasyComm sensor commands so calibration is written through the existing WT901 serial reader instead of opening a competing serial process. See `docs/web-sensor-controls.md`.
 
+## Validated WT901 sensor mapping
+
+Current validated bench mapping for the WT901 is `--az-axis yaw --az-offset 270.00 --el-axis roll --el-offset 14.60`, with no `--el-invert`. Keep `--motor-backend simulator` until the rotator is mechanically assembled and the limit-switch true-zero workflow is added.
+
+Measured elevation feedback may go negative before the lower limit switch establishes true zero. Commanded target elevation remains constrained to `0..180` degrees.
