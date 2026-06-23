@@ -61,3 +61,7 @@ sudo ./scripts/gpio-smoke-test.sh --execute --confirm-unloaded --axis both --sec
 
 The script is dry-run by default and requires both `--execute` and `--confirm-unloaded` before it writes GPIO. See [the GPIO smoke test guide](docs/gpio-smoke-test.md).
 
+### GPIO backend uses Raspberry Pi pinctrl
+
+The daemon GPIO backend uses the Raspberry Pi `pinctrl` command, matching the standalone GPIO smoke test. Legacy `/sys/class/gpio` is not required.
+

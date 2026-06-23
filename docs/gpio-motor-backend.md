@@ -36,9 +36,13 @@ If an axis moves the wrong direction, use `--az-motor-invert` or `--el-motor-inv
 
 The controller stops all motor outputs on STOP, SIGINT, SIGTERM, target deadband, stale WT901 feedback, sensor failure, or GPIO write fault.
 
-GPIO output is digital on/off in v1. PWM speed control is intentionally left for a later milestone after direction and fail-safe stopping are verified on real hardware.
+GPIO output is digital on/off through pinctrl in v1. PWM speed control is intentionally left for a later milestone after direction and fail-safe stopping are verified on real hardware.
 
 ## Hardware smoke test
 
 Before enabling `--motor-backend gpio` in the daemon, run the standalone GPIO smoke test with the motors mechanically unloaded. See [GPIO smoke test](gpio-smoke-test.md).
+
+## Raspberry Pi OS GPIO method
+
+The daemon GPIO backend uses the Raspberry Pi `pinctrl` command rather than legacy `/sys/class/gpio`. This matches current Raspberry Pi OS behavior and the standalone GPIO smoke test.
 

@@ -32,5 +32,9 @@ The integrated HTTP server listens on port 8080. Its API does not access `Rotato
 
 ## GPIO motor backend v1
 
-The controller now owns a `MotorDriver` abstraction. The default driver is simulator/no-output. The GPIO implementation uses sysfs GPIO digital outputs for L298N enable and direction pins, and it is only selected when `--motor-backend gpio` is provided. GPIO mode requires live WT901 feedback and is stopped by stale feedback, STOP, target deadband, sensor failure, or process shutdown.
+The controller now owns a `MotorDriver` abstraction. The default driver is simulator/no-output. The GPIO implementation uses the Raspberry Pi pinctrl command for L298N enable and direction pins, and it is only selected when `--motor-backend gpio` is provided. GPIO mode requires live WT901 feedback and is stopped by stale feedback, STOP, target deadband, sensor failure, or process shutdown.
+
+## pinctrl GPIO backend v1
+
+The real GPIO motor backend uses the Raspberry Pi `pinctrl` command to drive L298N enable and direction pins. This replaced the earlier legacy sysfs GPIO approach after smoke testing showed `/sys/class/gpio` writes fail on the fresh Raspberry Pi OS build.
 

@@ -1,23 +1,15 @@
 #include "rotator/gpio_motor_backend.hpp"
 
 #include <array>
-#include <chrono>
-#include <filesystem>
-#include <fstream>
+#include <cstdlib>
 #include <stdexcept>
 #include <string>
-#include <thread>
+#include <sys/wait.h>
 
 namespace rotator {
 namespace {
 
-constexpr const char* kGpioSysfsRoot = "/sys/class/gpio";
-
-std::filesystem::path gpio_root() { return kGpioSysfsRoot; }
-
-std::filesystem::path gpio_path(int gpio) {
-    return gpio_root() / ("gpio" + std::to_string(gpio));
-}
+constexpr const char* kPinctrlCommand = "pinctrl";
 
 void validate_pin(int gpio) {
     if (gpio < 0) {
@@ -25,33 +17,21 @@ void validate_pin(int gpio) {
     }
 }
 
-void write_text(const std::filesystem::path& path, const std::string& value) {
-    std::ofstream out(path);
-    if (!out) {
-        throw std::runtime_error("unable to open " + path.string());
-    }
-    out << value;
-    if (!out) {
-        throw std::runtime_error("unable to write " + path.string());
-    }
-}
+std::string pin_mode(bool value) { return value ? "dh" : "dl"; }
 
-void export_pin(int gpio) {
+void run_pinctrl(int gpio, bool value) {
     validate_pin(gpio);
-    const auto path = gpio_path(gpio);
-    if (!std::filesystem::exists(path)) {
-        write_text(gpio_root() / "export", std::to_string(gpio));
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    }
-    if (!std::filesystem::exists(path)) {
-        throw std::runtime_error("GPIO " + std::to_string(gpio) + " did not appear after export");
-    }
-    write_text(path / "direction", "out");
-    write_text(path / "value", "0");
-}
 
-void set_pin(int gpio, bool value) {
-    write_text(gpio_path(gpio) / "value", value ? "1" : "0");
+    const std::string command = std::string(kPinctrlCommand) + " set " +
+                                std::to_string(gpio) + " op " + pin_mode(value);
+    const int result = std::system(command.c_str());
+    if (result == -1) {
+        throw std::runtime_error("failed to execute pinctrl");
+    }
+    if (!WIFEXITED(result) || WEXITSTATUS(result) != 0) {
+        throw std::runtime_error("pinctrl command failed for GPIO " +
+                                 std::to_string(gpio));
+    }
 }
 
 AxisDirection maybe_invert(AxisDirection direction, bool invert) {
@@ -82,35 +62,38 @@ GpioMotorDriver::~GpioMotorDriver() {
     }
 }
 
-std::string GpioMotorDriver::name() const { return "gpio-sysfs"; }
+std::string GpioMotorDriver::name() const { return "gpio-pinctrl"; }
 
 void GpioMotorDriver::configure_axis(const AxisGpioPins& pins) {
     const std::array<int, 3> values{pins.enable, pins.forward, pins.reverse};
     for (const int gpio : values) {
-        export_pin(gpio);
+        validate_pin(gpio);
     }
+    apply_axis(pins, AxisDirection::stopped);
 }
 
 void GpioMotorDriver::apply_axis(const AxisGpioPins& pins, AxisDirection direction) {
     direction = maybe_invert(direction, pins.invert);
 
     if (direction == AxisDirection::stopped) {
-        set_pin(pins.enable, false);
-        set_pin(pins.forward, false);
-        set_pin(pins.reverse, false);
+        run_pinctrl(pins.enable, false);
+        run_pinctrl(pins.forward, false);
+        run_pinctrl(pins.reverse, false);
         return;
     }
 
     if (direction == AxisDirection::positive) {
-        set_pin(pins.reverse, false);
-        set_pin(pins.forward, true);
-        set_pin(pins.enable, true);
+        run_pinctrl(pins.enable, false);
+        run_pinctrl(pins.reverse, false);
+        run_pinctrl(pins.forward, true);
+        run_pinctrl(pins.enable, true);
         return;
     }
 
-    set_pin(pins.forward, false);
-    set_pin(pins.reverse, true);
-    set_pin(pins.enable, true);
+    run_pinctrl(pins.enable, false);
+    run_pinctrl(pins.forward, false);
+    run_pinctrl(pins.reverse, true);
+    run_pinctrl(pins.enable, true);
 }
 
 void GpioMotorDriver::apply(MotorCommand command) {
