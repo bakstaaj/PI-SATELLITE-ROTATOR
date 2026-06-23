@@ -53,6 +53,21 @@ Command parse_easycomm(std::string_view line) {
         return {CommandKind::status, std::nullopt, std::nullopt, {}};
     }
 
+    if (text == "SENSOR TEST") {
+        return {CommandKind::sensor_test, std::nullopt, std::nullopt, {}};
+    }
+    if (text == "SENSOR CALIBRATE ACCEL" || text == "SENSOR CAL ACCEL" ||
+        text == "SENSOR CALIBRATE ACCELEROMETER") {
+        return {CommandKind::sensor_calibrate_accel, std::nullopt, std::nullopt, {}};
+    }
+    if (text == "SENSOR CALIBRATE MAGNETIC START" || text == "SENSOR MAG START") {
+        return {CommandKind::sensor_calibrate_magnetic_start, std::nullopt, std::nullopt, {}};
+    }
+    if (text == "SENSOR CALIBRATE MAGNETIC FINISH" || text == "SENSOR MAG FINISH" ||
+        text == "SENSOR CALIBRATE MAGNETIC SAVE" || text == "SENSOR MAG SAVE") {
+        return {CommandKind::sensor_calibrate_magnetic_finish, std::nullopt, std::nullopt, {}};
+    }
+
     std::istringstream input(text);
     std::vector<std::string> tokens;
     for (std::string token; input >> token;) {

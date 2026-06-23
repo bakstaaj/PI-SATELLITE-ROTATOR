@@ -87,6 +87,8 @@ int main() {
     const auto page = request(web_port, "GET", "/");
     require(page.find("200 OK") != std::string::npos, "serve control page");
     require(page.find("Satellite Rotator") != std::string::npos, "page title");
+    require(page.find("Sensor diagnostics") != std::string::npos,
+            "sensor diagnostics controls");
 
     const auto initial = request(web_port, "GET", "/api/status");
     require(initial.find("\"azimuth\":0.0") != std::string::npos, "initial azimuth");
@@ -97,6 +99,16 @@ int main() {
             "initial moving state");
     require(initial.find("\"ok\":true") != std::string::npos,
             "web proxy works while another EasyComm client is idle");
+
+
+    const auto sensor_test = request(web_port, "POST", "/api/sensor/test");
+    require(sensor_test.find("200 OK") != std::string::npos, "sensor test endpoint");
+    require(sensor_test.find("\"motor_backend\":\"simulator\"") != std::string::npos,
+            "sensor test returns status json");
+
+    const auto no_sensor_cal = request(web_port, "POST", "/api/sensor/calibrate-accel");
+    require(no_sensor_cal.find("400 Bad Request") != std::string::npos,
+            "reject calibration without enabled WT901 feedback");
 
     require(request(web_port, "POST", "/api/move?az=123.4&el=45.6").find("200 OK") !=
                 std::string::npos,

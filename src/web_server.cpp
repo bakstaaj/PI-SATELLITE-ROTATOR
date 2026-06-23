@@ -37,8 +37,8 @@ h1{font-size:clamp(1.3rem,4vw,2rem);margin:0;letter-spacing:.04em}.eyebrow{color
 .readout{display:flex;justify-content:space-between;align-items:end}.label{color:var(--muted);font-size:.78rem;letter-spacing:.15em;text-transform:uppercase}.angle{font:600 clamp(2.6rem,9vw,5rem)/1 ui-monospace,monospace;letter-spacing:-.08em}.unit{font-size:1rem;color:var(--cyan);margin:0 0 8px 8px}.track{height:7px;background:#07111a;border-radius:9px;overflow:hidden;margin-top:20px}.fill{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .25s ease}
 .controls{margin-top:16px}.target-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.field label{display:flex;justify-content:space-between;color:var(--muted);font-size:.84rem;margin-bottom:8px}.field input[type=number]{width:92px;background:#07111a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}.field input[type=range]{width:100%;accent-color:var(--cyan)}
 .actions{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:10px;margin-top:20px}button{border:1px solid var(--line);border-radius:10px;background:#182839;color:var(--text);padding:12px 14px;font:700 .8rem system-ui;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}button:hover{filter:brightness(1.18)}button:active{transform:translateY(1px)}button.primary{background:var(--cyan);border-color:var(--cyan);color:#041116}button.stop{background:#401a22;border-color:#7f2c39;color:#ffadb4}button:disabled{opacity:.4;cursor:not-allowed}
-.jogs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.jog-group{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.jog-title{grid-column:1/-1;color:var(--muted);font-size:.78rem}.log{margin-top:16px;color:var(--muted);font:13px ui-monospace,monospace;min-height:1.4em}.danger{color:var(--red)}
-@media(max-width:700px){.grid,.target-grid,.jogs{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.actions .primary,.actions .stop{grid-column:span 1}.card{padding:16px}.shell{padding-top:18px}}
+.jogs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.jog-group{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.jog-title{grid-column:1/-1;color:var(--muted);font-size:.78rem}.log{margin-top:16px;color:var(--muted);font:13px ui-monospace,monospace;min-height:1.4em}.sensor-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}.hint{color:var(--muted);font-size:.88rem;line-height:1.45}.danger{color:var(--red)}
+@media(max-width:700px){.grid,.target-grid,.jogs,.sensor-actions{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.actions .primary,.actions .stop{grid-column:span 1}.card{padding:16px}.shell{padding-top:18px}}
 </style>
 </head>
 <body><main class="shell">
@@ -56,6 +56,16 @@ h1{font-size:clamp(1.3rem,4vw,2rem);margin:0;letter-spacing:.04em}.eyebrow{color
 <div class="jogs"><div class="jog-group"><div class="jog-title">Azimuth jog</div><button data-control data-axis="az" data-delta="-5">-5</button><button data-control data-axis="az" data-delta="-1">-1</button><button data-control data-axis="az" data-delta="1">+1</button><button data-control data-axis="az" data-delta="5">+5</button></div><div class="jog-group"><div class="jog-title">Elevation jog</div><button data-control data-axis="el" data-delta="-5">-5</button><button data-control data-axis="el" data-delta="-1">-1</button><button data-control data-axis="el" data-delta="1">+1</button><button data-control data-axis="el" data-delta="5">+5</button></div></div>
 <div id="log" class="log">Waiting for EasyComm listener...</div>
 </section>
+<section class="card controls">
+<div class="label">Sensor diagnostics</div>
+<p class="hint">Use Sensor Test to verify WT901 feedback. Level/Accel calibration requires the sensor to be level and motionless. Magnetic calibration starts collection; rotate the sensor around all axes, then press Finish/Save.</p>
+<div class="sensor-actions">
+<button data-control id="sensorTest">Sensor Test</button>
+<button data-control id="calAccel">Level/Accel Cal</button>
+<button data-control id="magStart">Mag Cal Start</button>
+<button data-control id="magFinish">Mag Finish/Save</button>
+</div>
+</section>
 </main>
 <script>
 const $=id=>document.getElementById(id);let current={azimuth:0,elevation:0},busy=false;
@@ -69,6 +79,10 @@ $('move').onclick=()=>command('/api/move?az='+encodeURIComponent($('azTarget').v
 $('stop').onclick=()=>command('/api/stop','Sending stop...');
 $('park').onclick=()=>command('/api/park','Sending park target...');
 $('zero').onclick=()=>{if(confirm('Set the current sensor position to azimuth 0 and elevation 0?'))command('/api/zero','Zeroing current position...')};
+$('sensorTest').onclick=async()=>{busy=true;connected(true,'Testing WT901 sensor...');try{const j=await api('/api/sensor/test','POST');current=j;connected(!j.fault,statusLine(j));}catch(e){connected(false,e.message)}finally{busy=false;document.querySelectorAll('[data-control]').forEach(x=>x.disabled=$('status').classList.contains('offline'))}};
+$('calAccel').onclick=()=>{if(confirm('Keep the WT901 level and motionless. Start accelerometer calibration now?'))command('/api/sensor/calibrate-accel','Starting WT901 accelerometer calibration...')};
+$('magStart').onclick=()=>{if(confirm('Start magnetic calibration? After pressing OK, slowly rotate the sensor around all axes, then press Mag Finish/Save.'))command('/api/sensor/calibrate-magnetic-start','Starting WT901 magnetic calibration...')};
+$('magFinish').onclick=()=>command('/api/sensor/calibrate-magnetic-finish','Saving WT901 magnetic calibration...');
 document.querySelectorAll('[data-axis]').forEach(b=>b.onclick=()=>{let az=current.azimuth,el=current.elevation,d=Number(b.dataset.delta);if(b.dataset.axis==='az')az=(az+d+360)%360;else el=Math.max(0,Math.min(180,el+d));$('azTarget').value=$('azSlider').value=az.toFixed(1);$('elTarget').value=$('elSlider').value=el.toFixed(1);command('/api/move?az='+az.toFixed(1)+'&el='+el.toFixed(1),'Sending jog...')});
 refresh();setInterval(refresh,750);
 </script></body></html>)HTML";
@@ -259,6 +273,29 @@ void handle_request(int client, const HttpRequest& request, const std::string& h
                 throw std::runtime_error("invalid EasyComm status response");
             }
             http_response(client, 200, "application/json; charset=utf-8", raw);
+            return;
+        }
+        if (request.method == "POST" && request.target == "/api/sensor/test") {
+            const auto raw = connect_easycomm(host, port, "SENSOR TEST\n", true);
+            if (!raw.starts_with("{")) {
+                throw std::runtime_error("invalid EasyComm sensor test response");
+            }
+            http_response(client, 200, "application/json; charset=utf-8", raw);
+            return;
+        }
+        if (request.method == "POST" && request.target == "/api/sensor/calibrate-accel") {
+            require_easycomm_ok(connect_easycomm(host, port, "SENSOR CALIBRATE ACCEL\n", true));
+            http_response(client, 200, "application/json", "{\"ok\":true}");
+            return;
+        }
+        if (request.method == "POST" && request.target == "/api/sensor/calibrate-magnetic-start") {
+            require_easycomm_ok(connect_easycomm(host, port, "SENSOR CALIBRATE MAGNETIC START\n", true));
+            http_response(client, 200, "application/json", "{\"ok\":true}");
+            return;
+        }
+        if (request.method == "POST" && request.target == "/api/sensor/calibrate-magnetic-finish") {
+            require_easycomm_ok(connect_easycomm(host, port, "SENSOR CALIBRATE MAGNETIC FINISH\n", true));
+            http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }
         if (request.method == "POST" && request.target.starts_with("/api/move?")) {

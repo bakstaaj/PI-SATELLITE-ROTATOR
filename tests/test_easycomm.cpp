@@ -38,6 +38,17 @@ int main() {
 
     require(parse_easycomm("AZ EL").kind == CommandKind::query_position, "position query");
     require(parse_easycomm("STATUS").kind == CommandKind::status, "status command");
+    require(parse_easycomm("SENSOR TEST").kind == CommandKind::sensor_test,
+            "sensor test command");
+    require(parse_easycomm("SENSOR CALIBRATE ACCEL").kind ==
+                CommandKind::sensor_calibrate_accel,
+            "sensor calibrate accel command");
+    require(parse_easycomm("SENSOR CALIBRATE MAGNETIC START").kind ==
+                CommandKind::sensor_calibrate_magnetic_start,
+            "sensor magnetic start command");
+    require(parse_easycomm("SENSOR CALIBRATE MAGNETIC FINISH").kind ==
+                CommandKind::sensor_calibrate_magnetic_finish,
+            "sensor magnetic finish command");
     require(parse_easycomm("SA SE").kind == CommandKind::stop, "stop command");
     require(parse_easycomm("ZERO").kind == CommandKind::zero, "zero command");
     require(parse_easycomm("PARK").kind == CommandKind::park, "park command");
@@ -76,6 +87,23 @@ int main() {
     require(!controller.zero_current_position(), "reject zero while moving");
     controller.stop();
     require(controller.zero_current_position(), "allow zero after stop");
+
+
+    RotatorController sensor_command_controller;
+    require(!sensor_command_controller.request_sensor_action(
+                SensorAction::calibrate_accelerometer, error),
+            "reject sensor calibration before external feedback is enabled");
+    sensor_command_controller.enable_external_feedback();
+    require(sensor_command_controller.update_feedback(20.0, 20.0),
+            "seed sensor calibration controller");
+    require(sensor_command_controller.request_sensor_action(
+                SensorAction::calibrate_accelerometer, error),
+            "queue sensor calibration request");
+    auto pending_action = sensor_command_controller.take_sensor_action();
+    require(pending_action && *pending_action == SensorAction::calibrate_accelerometer,
+            "take queued sensor calibration request");
+    require(!sensor_command_controller.take_sensor_action(),
+            "sensor calibration request queue drains");
 
     RotatorController stale_controller;
     stale_controller.enable_external_feedback();

@@ -69,3 +69,7 @@ The daemon GPIO backend uses the Raspberry Pi `pinctrl` command, matching the st
 
 When the hardware is not mechanically assembled, keep WT901 feedback enabled but omit `--motor-backend gpio`. This leaves the service useful for sensor/web/API validation while preventing movement commands from energizing the L298N.
 
+### Web WT901 sensor controls
+
+The web UI includes Sensor Test, Level/Accel Calibration, and Magnetic Calibration Start/Finish controls. These controls use daemon-side EasyComm sensor commands so calibration is written through the existing WT901 serial reader instead of opening a competing serial process. See `docs/web-sensor-controls.md`.
+

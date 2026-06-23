@@ -16,6 +16,12 @@ struct Position {
     bool moving{false};
 };
 
+enum class SensorAction {
+    calibrate_accelerometer,
+    magnetic_calibration_start,
+    magnetic_calibration_finish
+};
+
 struct ControllerStatus {
     double azimuth{0.0};
     double elevation{0.0};
@@ -47,6 +53,8 @@ public:
     void set_motor_driver(std::shared_ptr<MotorDriver> driver);
     void service_safety();
     bool update_feedback(double azimuth, double elevation);
+    bool request_sensor_action(SensorAction action, std::string& error);
+    std::optional<SensorAction> take_sensor_action();
 
 private:
     void update_motion_state_locked();
@@ -63,6 +71,7 @@ private:
     std::chrono::steady_clock::time_point last_feedback_time_{};
     std::chrono::milliseconds feedback_timeout_{1000};
     std::string last_feedback_error_;
+    std::optional<SensorAction> pending_sensor_action_;
     std::shared_ptr<MotorDriver> motor_driver_;
     std::string motor_backend_{"simulator"};
     bool external_feedback_{false};

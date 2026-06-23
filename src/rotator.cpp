@@ -148,6 +148,27 @@ void RotatorController::service_safety() {
     update_motion_state_locked();
 }
 
+bool RotatorController::request_sensor_action(SensorAction action, std::string& error) {
+    std::lock_guard lock(mutex_);
+    if (!external_feedback_) {
+        error = "WT901 sensor is not enabled";
+        return false;
+    }
+    if (state_.moving || motion_commanded_) {
+        error = "stop motion before sensor calibration";
+        return false;
+    }
+    pending_sensor_action_ = action;
+    return true;
+}
+
+std::optional<SensorAction> RotatorController::take_sensor_action() {
+    std::lock_guard lock(mutex_);
+    auto action = pending_sensor_action_;
+    pending_sensor_action_.reset();
+    return action;
+}
+
 bool RotatorController::update_feedback(double azimuth, double elevation) {
     if (azimuth < 0.0 || azimuth >= 360.0 || elevation < 0.0 || elevation > 180.0) {
         std::lock_guard lock(mutex_);

@@ -81,6 +81,29 @@ std::string execute(std::string_view line, RotatorController& controller) {
         }
         case CommandKind::status:
             return format_status_json(controller.status());
+        case CommandKind::sensor_test:
+            return format_status_json(controller.status());
+        case CommandKind::sensor_calibrate_accel: {
+            std::string error;
+            if (!controller.request_sensor_action(SensorAction::calibrate_accelerometer, error)) {
+                return "ERR " + error + "\r\n";
+            }
+            return "OK SENSOR CALIBRATE ACCEL QUEUED\r\n";
+        }
+        case CommandKind::sensor_calibrate_magnetic_start: {
+            std::string error;
+            if (!controller.request_sensor_action(SensorAction::magnetic_calibration_start, error)) {
+                return "ERR " + error + "\r\n";
+            }
+            return "OK SENSOR CALIBRATE MAGNETIC START QUEUED\r\n";
+        }
+        case CommandKind::sensor_calibrate_magnetic_finish: {
+            std::string error;
+            if (!controller.request_sensor_action(SensorAction::magnetic_calibration_finish, error)) {
+                return "ERR " + error + "\r\n";
+            }
+            return "OK SENSOR CALIBRATE MAGNETIC FINISH QUEUED\r\n";
+        }
         case CommandKind::set_position: {
             std::string error;
             if (!controller.set_target(command.azimuth, command.elevation, error)) {

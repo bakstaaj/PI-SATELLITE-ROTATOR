@@ -12,6 +12,7 @@
 #include <exception>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -169,6 +170,40 @@ Options parse_options(int argc, char** argv) {
     return options;
 }
 
+void send_wit_command(rotator::SerialPort& port,
+                      const std::array<std::uint8_t, 5>& command) {
+    port.write_all(command);
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+}
+
+void perform_sensor_action(rotator::SerialPort& port, rotator::SensorAction action,
+                           rotator::RotatorController& controller) {
+    controller.stop();
+    switch (action) {
+        case rotator::SensorAction::calibrate_accelerometer:
+            std::cerr << "WT901 accelerometer calibration requested; keep the sensor level and still\n";
+            send_wit_command(port, rotator::wit_unlock_command());
+            send_wit_command(port, rotator::wit_accelerometer_calibration_command());
+            std::this_thread::sleep_for(std::chrono::milliseconds(5500));
+            send_wit_command(port, rotator::wit_unlock_command());
+            send_wit_command(port, rotator::wit_save_command());
+            std::cerr << "WT901 accelerometer calibration saved\n";
+            break;
+        case rotator::SensorAction::magnetic_calibration_start:
+            std::cerr << "WT901 magnetic calibration started; rotate slowly around all axes\n";
+            send_wit_command(port, rotator::wit_unlock_command());
+            send_wit_command(port, rotator::wit_magnetic_calibration_command());
+            break;
+        case rotator::SensorAction::magnetic_calibration_finish:
+            std::cerr << "WT901 magnetic calibration finishing and saving\n";
+            send_wit_command(port, rotator::wit_unlock_command());
+            send_wit_command(port, rotator::wit_normal_command());
+            send_wit_command(port, rotator::wit_save_command());
+            std::cerr << "WT901 magnetic calibration saved\n";
+            break;
+    }
+}
+
 void print_usage() {
     std::cerr
         << "usage: pi-satellite-rotator [--port PORT] [--sensor DEVICE]\n"
@@ -193,6 +228,9 @@ void read_sensor(rotator::SerialPort port, const Options& options,
         bool elevation_mapping_valid = true;
         auto next_mapping_warning = std::chrono::steady_clock::now();
         while (!stopping.load()) {
+            if (auto action = controller.take_sensor_action()) {
+                perform_sensor_action(port, *action, controller);
+            }
             const auto count = port.read(bytes, std::chrono::milliseconds(200));
             for (const auto& frame : decoder.push(std::span(bytes).first(count))) {
                 if (!rotator::apply_wit_frame(frame, sample) ||
