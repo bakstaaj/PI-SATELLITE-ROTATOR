@@ -145,6 +145,19 @@ int main() {
     require(maintenance_status.sensor_maintenance_reason == "test sensor maintenance",
             "sensor maintenance reason is reported");
 
+    RotatorController stream_controller;
+    stream_controller.enable_external_feedback();
+    stream_controller.set_feedback_timeout(10ms);
+    require(!stream_controller.update_feedback(20.0, 181.5),
+            "reject invalid mapped feedback while recording stream frame");
+    const auto stream_status = stream_controller.status();
+    require(stream_status.sensor_stream_received,
+            "sensor stream records invalid mapped frame");
+    require(stream_status.sensor_stream_age_ms >= 0,
+            "sensor stream age is reported");
+    require(!stream_status.feedback_received,
+            "invalid mapped frame is not accepted as feedback");
+
     std::cout << "All tests passed\n";
     return 0;
 }

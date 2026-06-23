@@ -29,3 +29,7 @@ These commands are intended for diagnostics and setup. They do not intentionally
 ## Calibration status
 
 During Level/Accel and magnetic calibration command windows, STATUS includes `sensor_maintenance` and `sensor_maintenance_reason`. A temporary stale WT901 frame age during this maintenance window is not treated as a controller fault.
+
+## Sensor stream versus mapped feedback
+
+`SENSOR TEST` reports both WT901 stream health and mapped rotator feedback health. `sensor_stream_received` and `sensor_stream_age_ms` indicate whether frames are arriving from the WT901. Mapped feedback may still be invalid if the selected axis, inversion, or offset produces an elevation outside the allowed 0-180 degree rotator range.

@@ -189,13 +189,17 @@ void RotatorController::begin_sensor_maintenance(std::chrono::milliseconds durat
 }
 
 bool RotatorController::update_feedback(double azimuth, double elevation) {
+    std::lock_guard lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+
+    sensor_frame_received_ = true;
+    last_sensor_frame_time_ = now;
+
     if (azimuth < 0.0 || azimuth >= 360.0 || elevation < 0.0 || elevation > 180.0) {
-        std::lock_guard lock(mutex_);
-        last_feedback_error_ = "feedback outside sensor range";
+        last_feedback_error_ = "mapped feedback outside rotator range";
         return false;
     }
 
-    std::lock_guard lock(mutex_);
     const double mapped_azimuth = normalize_azimuth(azimuth - feedback_zero_.azimuth);
     const double mapped_elevation = elevation - feedback_zero_.elevation;
     constexpr double boundary_tolerance = 1.0;
@@ -208,7 +212,7 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
     raw_feedback_.azimuth = azimuth;
     raw_feedback_.elevation = elevation;
     feedback_received_ = true;
-    last_feedback_time_ = std::chrono::steady_clock::now();
+    last_feedback_time_ = now;
     sensor_maintenance_until_ = {};
     sensor_maintenance_reason_.clear();
     last_feedback_error_.clear();
@@ -287,6 +291,12 @@ ControllerStatus RotatorController::status_locked(
     status.target_elevation = target_.elevation;
     status.external_feedback = external_feedback_;
     status.feedback_received = feedback_received_;
+    status.sensor_stream_received = sensor_frame_received_;
+    if (sensor_frame_received_) {
+        status.sensor_stream_age_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - last_sensor_frame_time_)
+                .count();
+    }
     status.feedback_stale = feedback_stale_locked(now);
     status.sensor_maintenance = sensor_maintenance_locked(now);
     if (status.sensor_maintenance) {

@@ -63,6 +63,8 @@ std::string format_status_json(const ControllerStatus& status) {
          << ",\"feedback_received\":" << json_bool(status.feedback_received)
          << ",\"feedback_stale\":" << json_bool(status.feedback_stale)
          << ",\"feedback_age_ms\":" << status.feedback_age_ms
+          << ",\"sensor_stream_received\":" << json_bool(status.sensor_stream_received)
+          << ",\"sensor_stream_age_ms\":" << status.sensor_stream_age_ms
          << ",\"fault\":" << json_bool(status.fault)
          << ",\"fault_reason\":\"" << json_escape(status.fault_reason) << "\""
           << ",\"sensor_maintenance\":" << json_bool(status.sensor_maintenance)

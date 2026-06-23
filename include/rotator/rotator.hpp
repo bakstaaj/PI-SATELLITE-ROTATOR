@@ -32,6 +32,8 @@ struct ControllerStatus {
     bool feedback_received{false};
     bool feedback_stale{false};
     long long feedback_age_ms{-1};
+    bool sensor_stream_received{false};
+    long long sensor_stream_age_ms{-1};
     bool fault{false};
     std::string fault_reason;
     std::string motor_backend{"simulator"};
@@ -74,6 +76,7 @@ private:
     Position raw_feedback_;
     Position feedback_zero_;
     std::chrono::steady_clock::time_point last_feedback_time_{};
+    std::chrono::steady_clock::time_point last_sensor_frame_time_{};
     std::chrono::milliseconds feedback_timeout_{1000};
     std::string last_feedback_error_;
     std::optional<SensorAction> pending_sensor_action_;
@@ -83,6 +86,7 @@ private:
     std::string motor_backend_{"simulator"};
     bool external_feedback_{false};
     bool feedback_received_{false};
+    bool sensor_frame_received_{false};
     bool motion_commanded_{false};
     bool motor_fault_{false};
     std::string motor_fault_reason_;
