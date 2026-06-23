@@ -1,9 +1,11 @@
 #include "rotator/easycomm.hpp"
+#include "rotator/motor_backend.hpp"
 #include "rotator/rotator.hpp"
 
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
 
@@ -14,6 +16,16 @@ void require(bool condition, const std::string& message) {
         std::exit(1);
     }
 }
+
+class RecordingMotorDriver final : public rotator::MotorDriver {
+public:
+    std::string name() const override { return "recording"; }
+    void apply(rotator::MotorCommand command) override { last = command; ++apply_count; }
+    void stop() override { last = {}; ++stop_count; }
+    rotator::MotorCommand last;
+    int apply_count{0};
+    int stop_count{0};
+};
 }
 
 int main() {
@@ -43,6 +55,7 @@ int main() {
     const auto simulator_status = controller.status();
     require(!simulator_status.external_feedback, "simulator reports no external feedback");
     require(simulator_status.target_azimuth == 359.0, "status reports target azimuth");
+    require(simulator_status.motor_backend == "simulator", "status reports simulator motor backend");
 
     controller.enable_external_feedback();
     require(!controller.set_target(125.0, 35.0, error),

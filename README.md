@@ -47,3 +47,7 @@ sudo ./scripts/install-pi.sh --start
 
 The installer creates a `satrot` service user, installs binaries under `/opt/pi-satellite-rotator/bin`, installs a systemd unit, creates `/etc/pi-satellite-rotator/pi-satellite-rotator.env`, and prints the Pi LAN IP address. See [the Raspberry Pi install guide](docs/pi-install.md) for details.
 
+## GPIO motor backend
+
+The default runtime remains safe simulator mode. Real L298N GPIO output is opt-in with `--motor-backend gpio` and requires `--sensor` so the controller has live WT901 feedback before motion. See [the GPIO motor backend guide](docs/gpio-motor-backend.md).
+

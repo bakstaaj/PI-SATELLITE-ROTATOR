@@ -65,6 +65,9 @@ std::string format_status_json(const ControllerStatus& status) {
          << ",\"feedback_age_ms\":" << status.feedback_age_ms
          << ",\"fault\":" << json_bool(status.fault)
          << ",\"fault_reason\":\"" << json_escape(status.fault_reason) << "\""
+         << ",\"motor_backend\":\"" << json_escape(status.motor_backend) << "\""
+         << ",\"motor_fault\":" << json_bool(status.motor_fault)
+         << ",\"motor_fault_reason\":\"" << json_escape(status.motor_fault_reason) << "\""
          << ",\"backend\":\"easycomm\"}\r\n";
     return body.str();
 }

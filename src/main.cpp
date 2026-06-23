@@ -1,3 +1,5 @@
+#include "rotator/gpio_motor_backend.hpp"
+#include "rotator/motor_backend.hpp"
 #include "rotator/tcp_server.hpp"
 #include "rotator/web_server.hpp"
 #include "rotator/witmotion.hpp"
@@ -19,6 +21,7 @@ std::atomic_bool stopping{false};
 void handle_signal(int) { stopping.store(true); }
 
 enum class SensorAxis : std::size_t { roll = 0, pitch = 1, yaw = 2 };
+enum class MotorBackend { simulator, gpio };
 
 struct Options {
     std::uint16_t port{4553};
@@ -33,6 +36,8 @@ struct Options {
     double elevation_offset{0.0};
     double azimuth_sign{1.0};
     double elevation_sign{1.0};
+    MotorBackend motor_backend{MotorBackend::simulator};
+    rotator::GpioMotorPins gpio_pins;
 };
 
 SensorAxis parse_axis(const std::string& value) {
@@ -46,6 +51,16 @@ SensorAxis parse_axis(const std::string& value) {
         return SensorAxis::yaw;
     }
     throw std::invalid_argument("axis must be roll, pitch, or yaw");
+}
+
+MotorBackend parse_motor_backend(const std::string& value) {
+    if (value == "simulator") {
+        return MotorBackend::simulator;
+    }
+    if (value == "gpio") {
+        return MotorBackend::gpio;
+    }
+    throw std::invalid_argument("motor backend must be simulator or gpio");
 }
 
 int integer(const char* value, const std::string& name) {
@@ -72,6 +87,14 @@ double number(const char* value, const std::string& name) {
     } catch (const std::exception&) {
         throw std::invalid_argument("invalid " + name + ": " + value);
     }
+}
+
+int gpio_pin(const char* value, const std::string& name) {
+    const int parsed = integer(value, name);
+    if (parsed < 0) {
+        throw std::invalid_argument(name + " must be non-negative");
+    }
+    return parsed;
 }
 
 Options parse_options(int argc, char** argv) {
@@ -118,9 +141,30 @@ Options parse_options(int argc, char** argv) {
             options.azimuth_sign = -1.0;
         } else if (argument == "--el-invert") {
             options.elevation_sign = -1.0;
+        } else if (argument == "--motor-backend" && i + 1 < argc) {
+            options.motor_backend = parse_motor_backend(argv[++i]);
+        } else if (argument == "--az-enable-gpio" && i + 1 < argc) {
+            options.gpio_pins.azimuth.enable = gpio_pin(argv[++i], "azimuth enable GPIO");
+        } else if (argument == "--az-forward-gpio" && i + 1 < argc) {
+            options.gpio_pins.azimuth.forward = gpio_pin(argv[++i], "azimuth forward GPIO");
+        } else if (argument == "--az-reverse-gpio" && i + 1 < argc) {
+            options.gpio_pins.azimuth.reverse = gpio_pin(argv[++i], "azimuth reverse GPIO");
+        } else if (argument == "--el-enable-gpio" && i + 1 < argc) {
+            options.gpio_pins.elevation.enable = gpio_pin(argv[++i], "elevation enable GPIO");
+        } else if (argument == "--el-forward-gpio" && i + 1 < argc) {
+            options.gpio_pins.elevation.forward = gpio_pin(argv[++i], "elevation forward GPIO");
+        } else if (argument == "--el-reverse-gpio" && i + 1 < argc) {
+            options.gpio_pins.elevation.reverse = gpio_pin(argv[++i], "elevation reverse GPIO");
+        } else if (argument == "--az-motor-invert") {
+            options.gpio_pins.azimuth.invert = true;
+        } else if (argument == "--el-motor-invert") {
+            options.gpio_pins.elevation.invert = true;
         } else {
             throw std::invalid_argument("unknown or incomplete option: " + argument);
         }
+    }
+    if (options.motor_backend == MotorBackend::gpio && options.sensor_device.empty()) {
+        throw std::invalid_argument("--motor-backend gpio requires --sensor for closed-loop feedback");
     }
     return options;
 }
@@ -132,7 +176,11 @@ void print_usage() {
         << "       [--sensor-baud RATE] [--feedback-timeout-ms MS]\n"
         << "       [--az-axis roll|pitch|yaw] [--el-axis roll|pitch|yaw]\n"
         << "       [--az-offset DEG] [--el-offset DEG]\n"
-        << "       [--az-invert] [--el-invert]\n";
+        << "       [--az-invert] [--el-invert]\n"
+        << "       [--motor-backend simulator|gpio]\n"
+        << "       [--az-enable-gpio N] [--az-forward-gpio N] [--az-reverse-gpio N]\n"
+        << "       [--el-enable-gpio N] [--el-forward-gpio N] [--el-reverse-gpio N]\n"
+        << "       [--az-motor-invert] [--el-motor-invert]\n";
 }
 
 void read_sensor(rotator::SerialPort port, const Options& options,
@@ -186,6 +234,14 @@ void read_sensor(rotator::SerialPort port, const Options& options,
     }
 }
 
+void monitor_safety(rotator::RotatorController& controller) {
+    while (!stopping.load()) {
+        controller.service_safety();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    controller.stop();
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -196,8 +252,16 @@ int main(int argc, char** argv) {
 
         rotator::RotatorController controller;
         controller.set_feedback_timeout(std::chrono::milliseconds(options.feedback_timeout_ms));
+        std::shared_ptr<rotator::MotorDriver> motor_driver;
+        if (options.motor_backend == MotorBackend::gpio) {
+            motor_driver = std::make_shared<rotator::GpioMotorDriver>(options.gpio_pins);
+            controller.set_motor_driver(motor_driver);
+            std::cout << "GPIO motor backend enabled for L298N outputs\n";
+        }
+
         std::thread sensor_thread;
         std::thread web_thread;
+        std::thread safety_thread;
         if (!options.sensor_device.empty()) {
             rotator::SerialPort sensor(options.sensor_device, options.sensor_baud);
             controller.enable_external_feedback();
@@ -206,6 +270,10 @@ int main(int argc, char** argv) {
             std::cout << "WT901 input: " << options.sensor_device << " at "
                       << options.sensor_baud << " baud; feedback timeout "
                       << options.feedback_timeout_ms << " ms\n";
+        }
+
+        if (motor_driver) {
+            safety_thread = std::thread(monitor_safety, std::ref(controller));
         }
 
         if (options.web_enabled) {
@@ -223,9 +291,13 @@ int main(int argc, char** argv) {
         if (sensor_thread.joinable()) {
             sensor_thread.join();
         }
+        if (safety_thread.joinable()) {
+            safety_thread.join();
+        }
         if (web_thread.joinable()) {
             web_thread.join();
         }
+        controller.stop();
         return result;
     } catch (const std::exception& error) {
         std::cerr << "pi-satellite-rotator: " << error.what() << '\n';

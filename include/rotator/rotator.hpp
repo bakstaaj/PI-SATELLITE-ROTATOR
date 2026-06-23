@@ -1,6 +1,9 @@
 #pragma once
 
+#include "rotator/motor_backend.hpp"
+
 #include <chrono>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -25,6 +28,9 @@ struct ControllerStatus {
     long long feedback_age_ms{-1};
     bool fault{false};
     std::string fault_reason;
+    std::string motor_backend{"simulator"};
+    bool motor_fault{false};
+    std::string motor_fault_reason;
 };
 
 class RotatorController {
@@ -38,10 +44,14 @@ public:
     bool zero_current_position();
     void enable_external_feedback();
     void set_feedback_timeout(std::chrono::milliseconds timeout);
+    void set_motor_driver(std::shared_ptr<MotorDriver> driver);
+    void service_safety();
     bool update_feedback(double azimuth, double elevation);
 
 private:
     void update_motion_state_locked();
+    void apply_motor_command_locked();
+    void stop_motor_locked();
     bool feedback_stale_locked(std::chrono::steady_clock::time_point now) const;
     ControllerStatus status_locked(std::chrono::steady_clock::time_point now) const;
 
@@ -53,9 +63,13 @@ private:
     std::chrono::steady_clock::time_point last_feedback_time_{};
     std::chrono::milliseconds feedback_timeout_{1000};
     std::string last_feedback_error_;
+    std::shared_ptr<MotorDriver> motor_driver_;
+    std::string motor_backend_{"simulator"};
     bool external_feedback_{false};
     bool feedback_received_{false};
     bool motion_commanded_{false};
+    bool motor_fault_{false};
+    std::string motor_fault_reason_;
 };
 
 }  // namespace rotator

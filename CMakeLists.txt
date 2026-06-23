@@ -6,6 +6,8 @@ include(CTest)
 add_library(rotator_core
     src/easycomm.cpp
     src/rotator.cpp
+    src/gpio_motor_backend.cpp
+    src/motor_backend.cpp
     src/witmotion.cpp
 )
 target_include_directories(rotator_core PUBLIC include)

@@ -2,9 +2,12 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 
 namespace rotator {
 namespace {
+constexpr double deadband = 0.5;
+
 double azimuth_error(double target, double actual) {
     double error = target - actual;
     while (error > 180.0) {
@@ -25,6 +28,14 @@ double normalize_azimuth(double value) {
     }
     return value;
 }
+
+AxisDirection direction_from_error(double error) {
+    if (std::abs(error) <= deadband) {
+        return AxisDirection::stopped;
+    }
+    return error > 0.0 ? AxisDirection::positive : AxisDirection::negative;
+}
+
 }  // namespace
 
 bool RotatorController::set_target(std::optional<double> azimuth,
@@ -41,12 +52,17 @@ bool RotatorController::set_target(std::optional<double> azimuth,
 
     std::lock_guard lock(mutex_);
     const auto now = std::chrono::steady_clock::now();
+    if (motor_fault_) {
+        error = "motor backend fault: " + motor_fault_reason_;
+        return false;
+    }
     if (external_feedback_ && !feedback_received_) {
         error = "valid sensor feedback is required before motion commands";
         return false;
     }
     if (feedback_stale_locked(now)) {
         error = "sensor feedback is stale";
+        stop_motor_locked();
         return false;
     }
     if (azimuth) {
@@ -83,6 +99,7 @@ void RotatorController::stop() {
     std::lock_guard lock(mutex_);
     motion_commanded_ = false;
     state_.moving = false;
+    stop_motor_locked();
 }
 
 bool RotatorController::zero_current_position() {
@@ -92,6 +109,7 @@ bool RotatorController::zero_current_position() {
         return false;
     }
     motion_commanded_ = false;
+    stop_motor_locked();
     if (external_feedback_) {
         feedback_zero_.azimuth = raw_feedback_.azimuth;
         feedback_zero_.elevation = raw_feedback_.elevation;
@@ -110,11 +128,24 @@ void RotatorController::enable_external_feedback() {
     state_.moving = false;
     feedback_received_ = false;
     last_feedback_error_.clear();
+    stop_motor_locked();
 }
 
 void RotatorController::set_feedback_timeout(std::chrono::milliseconds timeout) {
     std::lock_guard lock(mutex_);
     feedback_timeout_ = timeout.count() > 0 ? timeout : std::chrono::milliseconds(1000);
+}
+
+void RotatorController::set_motor_driver(std::shared_ptr<MotorDriver> driver) {
+    std::lock_guard lock(mutex_);
+    motor_driver_ = std::move(driver);
+    motor_backend_ = motor_driver_ ? motor_driver_->name() : "simulator";
+    stop_motor_locked();
+}
+
+void RotatorController::service_safety() {
+    std::lock_guard lock(mutex_);
+    update_motion_state_locked();
 }
 
 bool RotatorController::update_feedback(double azimuth, double elevation) {
@@ -146,11 +177,51 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
 }
 
 void RotatorController::update_motion_state_locked() {
-    constexpr double deadband = 0.5;
-    state_.moving = external_feedback_ && motion_commanded_ && feedback_received_ &&
-                    !feedback_stale_locked(std::chrono::steady_clock::now()) &&
+    const auto now = std::chrono::steady_clock::now();
+    const bool stale = feedback_stale_locked(now);
+    state_.moving = external_feedback_ && motion_commanded_ && feedback_received_ && !stale &&
+                    !motor_fault_ &&
                     (std::abs(azimuth_error(target_.azimuth, state_.azimuth)) > deadband ||
                      std::abs(target_.elevation - state_.elevation) > deadband);
+    apply_motor_command_locked();
+}
+
+void RotatorController::apply_motor_command_locked() {
+    if (!motor_driver_) {
+        return;
+    }
+
+    MotorCommand command;
+    if (state_.moving) {
+        command.azimuth = direction_from_error(azimuth_error(target_.azimuth, state_.azimuth));
+        command.elevation = direction_from_error(target_.elevation - state_.elevation);
+    }
+
+    try {
+        if (command.any_motion()) {
+            motor_driver_->apply(command);
+        } else {
+            motor_driver_->stop();
+        }
+    } catch (const std::exception& error) {
+        motor_fault_ = true;
+        motor_fault_reason_ = error.what();
+        motion_commanded_ = false;
+        state_.moving = false;
+    }
+}
+
+void RotatorController::stop_motor_locked() {
+    if (!motor_driver_) {
+        return;
+    }
+
+    try {
+        motor_driver_->stop();
+    } catch (const std::exception& error) {
+        motor_fault_ = true;
+        motor_fault_reason_ = error.what();
+    }
 }
 
 bool RotatorController::feedback_stale_locked(
@@ -169,15 +240,20 @@ ControllerStatus RotatorController::status_locked(
     status.external_feedback = external_feedback_;
     status.feedback_received = feedback_received_;
     status.feedback_stale = feedback_stale_locked(now);
-    status.moving = state_.moving && !status.feedback_stale;
+    status.moving = state_.moving && !status.feedback_stale && !motor_fault_;
+    status.motor_backend = motor_backend_;
+    status.motor_fault = motor_fault_;
+    status.motor_fault_reason = motor_fault_reason_;
     if (feedback_received_) {
         status.feedback_age_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(now - last_feedback_time_)
                 .count();
     }
-    status.fault = status.feedback_stale;
+    status.fault = status.feedback_stale || status.motor_fault;
     if (status.feedback_stale) {
         status.fault_reason = "stale sensor feedback";
+    } else if (status.motor_fault) {
+        status.fault_reason = "motor backend fault: " + motor_fault_reason_;
     } else {
         status.fault_reason = last_feedback_error_;
     }

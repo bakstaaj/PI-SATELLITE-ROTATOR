@@ -29,3 +29,8 @@ The controller never derives antenna position from motor runtime, belt ratio, or
 Commands may be terminated by LF or CRLF. Responses use CRLF. The TCP service handles concurrent persistent clients, allowing tracking software and the web control proxy to remain connected at the same time.
 
 The integrated HTTP server listens on port 8080. Its API does not access `RotatorController` directly: every status or control operation opens a TCP connection to `127.0.0.1:4553` and sends the corresponding EasyComm command. This keeps browser testing on the same protocol path used by external tracking software.
+
+## GPIO motor backend v1
+
+The controller now owns a `MotorDriver` abstraction. The default driver is simulator/no-output. The GPIO implementation uses sysfs GPIO digital outputs for L298N enable and direction pins, and it is only selected when `--motor-backend gpio` is provided. GPIO mode requires live WT901 feedback and is stopped by stale feedback, STOP, target deadband, sensor failure, or process shutdown.
+
