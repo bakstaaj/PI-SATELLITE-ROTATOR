@@ -195,17 +195,18 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
     sensor_frame_received_ = true;
     last_sensor_frame_time_ = now;
 
-    if (azimuth < 0.0 || azimuth >= 360.0 || elevation < 0.0 || elevation > 180.0) {
-        last_feedback_error_ = "mapped feedback outside rotator range";
+    if (azimuth < 0.0 || azimuth >= 360.0 || elevation < -180.0 || elevation > 180.0) {
+        last_feedback_error_ = "raw sensor feedback outside expected attitude range";
         return false;
     }
 
     const double mapped_azimuth = normalize_azimuth(azimuth - feedback_zero_.azimuth);
     const double mapped_elevation = elevation - feedback_zero_.elevation;
-    constexpr double boundary_tolerance = 1.0;
-    if (mapped_elevation < -boundary_tolerance ||
-        mapped_elevation > 180.0 + boundary_tolerance) {
-        last_feedback_error_ = "mapped elevation outside 0-180 degrees";
+    constexpr double measured_elevation_lower_limit = -90.0;
+    constexpr double measured_elevation_upper_limit = 180.0;
+    if (mapped_elevation < measured_elevation_lower_limit ||
+        mapped_elevation > measured_elevation_upper_limit) {
+        last_feedback_error_ = "mapped measured elevation outside -90 to 180 degrees";
         return false;
     }
 
@@ -217,7 +218,7 @@ bool RotatorController::update_feedback(double azimuth, double elevation) {
     sensor_maintenance_reason_.clear();
     last_feedback_error_.clear();
     state_.azimuth = mapped_azimuth;
-    state_.elevation = std::clamp(mapped_elevation, 0.0, 180.0);
+    state_.elevation = mapped_elevation;
     update_motion_state_locked();
     return true;
 }

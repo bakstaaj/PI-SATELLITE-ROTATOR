@@ -3,6 +3,7 @@
 #include "rotator/rotator.hpp"
 
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <memory>
@@ -121,12 +122,20 @@ int main() {
     require(!boundary_controller.zero_current_position(), "reject zero before first feedback");
     require(boundary_controller.update_feedback(10.0, 10.0), "seed boundary feedback");
     require(boundary_controller.zero_current_position(), "zero boundary controller");
-    require(boundary_controller.update_feedback(10.0, 9.5), "tolerate elevation noise at zero");
-    require(boundary_controller.position().elevation == 0.0, "clamp boundary noise to zero");
-    require(!boundary_controller.update_feedback(10.0, 8.5), "reject material boundary error");
-    require(boundary_controller.status().fault_reason == "mapped elevation outside 0-180 degrees",
-            "report rejected feedback reason");
-    require(boundary_controller.position().elevation == 0.0,
+    require(boundary_controller.update_feedback(10.0, 9.5),
+            "allow small negative measured elevation below zero");
+    require(std::abs(boundary_controller.position().elevation - -0.5) < 0.01,
+            "negative measured elevation is reported instead of clamped");
+    require(boundary_controller.update_feedback(10.0, 8.5),
+            "allow negative measured elevation before limit switch zero");
+    require(std::abs(boundary_controller.position().elevation - -1.5) < 0.01,
+            "material negative measured elevation is reported");
+    require(!boundary_controller.update_feedback(10.0, -81.0),
+            "reject implausible negative measured elevation");
+    require(boundary_controller.status().fault_reason ==
+                "mapped measured elevation outside -90 to 180 degrees",
+            "report rejected measured elevation reason");
+    require(std::abs(boundary_controller.position().elevation - -1.5) < 0.01,
             "rejected feedback does not update position");
 
     RotatorController maintenance_controller;
