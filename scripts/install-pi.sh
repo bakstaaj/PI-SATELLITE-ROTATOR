@@ -42,6 +42,9 @@ pass "systemd service template exists"
 [[ -f config/pi-satellite-rotator.env.example ]] || fail "missing config/pi-satellite-rotator.env.example"
 pass "environment example exists"
 
+[[ -f web/index.html && -f web/app.css && -f web/app.js ]] || fail "missing web assets under web/"
+pass "web assets exist"
+
 if [[ "$SELF_CHECK" -eq 1 ]]; then
   pass "installer self-check completed"
   echo "FINAL RESULT: PASS"
@@ -85,6 +88,7 @@ else
 fi
 
 install -d -m 0755 "$install_root/bin"
+install -d -m 0755 "$install_root/web"
 install -d -m 0755 "$config_root"
 install -d -m 0755 "$state_root"
 install -d -m 0755 "$log_root"
@@ -94,6 +98,9 @@ pass "install/config/state/log directories prepared"
 install -m 0755 dist/pi-satellite-rotator "$install_root/bin/pi-satellite-rotator"
 install -m 0755 dist/witmotion-tool "$install_root/bin/witmotion-tool"
 pass "binaries installed under $install_root/bin"
+
+install -m 0644 web/index.html web/app.css web/app.js "$install_root/web/"
+pass "web assets installed under $install_root/web"
 
 install -m 0644 config/pi-satellite-rotator.env.example "$config_root/pi-satellite-rotator.env.example"
 if [[ -f "$config_root/pi-satellite-rotator.env" ]]; then

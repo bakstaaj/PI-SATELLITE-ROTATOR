@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Satellite Rotator</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body><main class="shell">
+<header class="top"><div><div class="eyebrow">EasyComm control surface</div><h1>Satellite Rotator</h1></div><div id="status" class="status"><span class="dot"></span><span id="statusText">Connecting</span></div></header>
+<section class="grid">
+<article class="card"><div class="readout"><div><div class="label">Azimuth</div><span id="azNow" class="angle">---.-</span><span class="unit">deg</span></div></div><div class="track"><div id="azFill" class="fill"></div></div></article>
+<article class="card"><div class="readout"><div><div class="label">Elevation</div><span id="elNow" class="angle">---.-</span><span class="unit">deg</span></div></div><div class="track"><div id="elFill" class="fill"></div></div></article>
+</section>
+<section class="card controls">
+<div class="target-grid">
+<div class="field"><label><span>Target azimuth</span><input id="azTarget" type="number" min="0" max="359" step="0.1" value="0.0"></label><input id="azSlider" type="range" min="0" max="359" step="0.1" value="0"></div>
+<div class="field"><label><span>Target elevation</span><input id="elTarget" type="number" min="0" max="180" step="0.1" value="0.0"></label><input id="elSlider" type="range" min="0" max="180" step="0.1" value="0"></div>
+</div>
+<div class="actions"><button class="primary" data-control id="move">Move</button><button class="stop" data-control id="stop">Stop</button><button data-control id="zero">Zero here</button><button data-control id="park">Park 0/0</button></div>
+<div class="jogs"><div class="jog-group"><div class="jog-title">Azimuth jog</div><button data-control data-axis="az" data-delta="-5">-5</button><button data-control data-axis="az" data-delta="-1">-1</button><button data-control data-axis="az" data-delta="1">+1</button><button data-control data-axis="az" data-delta="5">+5</button></div><div class="jog-group"><div class="jog-title">Elevation jog</div><button data-control data-axis="el" data-delta="-5">-5</button><button data-control data-axis="el" data-delta="-1">-1</button><button data-control data-axis="el" data-delta="1">+1</button><button data-control data-axis="el" data-delta="5">+5</button></div></div>
+<div id="log" class="log">Waiting for EasyComm listener...</div>
+</section>
+<section class="card controls">
+<div class="label">Sensor diagnostics</div>
+<p class="hint">Use Sensor Test to verify WT901 feedback. Level/Accel calibration requires the sensor to be level and motionless. Magnetic calibration starts collection; rotate the sensor around all axes, then press Finish/Save.</p>
+<div class="sensor-actions">
+<button data-control id="sensorTest">Sensor Test</button>
+<button data-control id="calAccel">Level/Accel Cal</button>
+<button data-control id="magStart">Mag Cal Start</button>
+<button data-control id="magFinish">Mag Finish/Save</button>
+</div>
+</section>
+</main>
+<script src="/static/app.js" defer></script></body></html>

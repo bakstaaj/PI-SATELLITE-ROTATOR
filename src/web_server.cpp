@@ -1,9 +1,12 @@
 #include "rotator/web_server.hpp"
 
+#include <array>
 #include <cerrno>
 #include <charconv>
 #include <cmath>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <netdb.h>
@@ -21,71 +24,34 @@
 namespace rotator {
 namespace {
 
-constexpr std::string_view page = R"HTML(<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Satellite Rotator</title>
-<style>
-:root{color-scheme:dark;--bg:#081019;--panel:#111d29;--line:#26394b;--text:#ecf4fa;--muted:#8fa7b9;--cyan:#35d0e5;--green:#62d68b;--amber:#f4ba52;--red:#ff626d}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% -20%,#18334a 0,var(--bg) 48%);color:var(--text);font:16px system-ui,-apple-system,Segoe UI,sans-serif;min-height:100vh}
-.shell{width:min(980px,calc(100% - 28px));margin:auto;padding:28px 0 44px}.top{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:20px}
-h1{font-size:clamp(1.3rem,4vw,2rem);margin:0;letter-spacing:.04em}.eyebrow{color:var(--cyan);font:700 .72rem ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;margin-bottom:5px}
-.status{display:flex;align-items:center;gap:9px;color:var(--muted);font-size:.86rem}.dot{width:10px;height:10px;border-radius:50%;background:var(--amber);box-shadow:0 0 14px var(--amber)}.online .dot{background:var(--green);box-shadow:0 0 14px var(--green)}.offline .dot{background:var(--red);box-shadow:0 0 14px var(--red)}
-.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}.card{background:linear-gradient(145deg,rgba(20,35,49,.96),rgba(12,23,33,.96));border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:0 14px 35px #0005}
-.readout{display:flex;justify-content:space-between;align-items:end}.label{color:var(--muted);font-size:.78rem;letter-spacing:.15em;text-transform:uppercase}.angle{font:600 clamp(2.6rem,9vw,5rem)/1 ui-monospace,monospace;letter-spacing:-.08em}.unit{font-size:1rem;color:var(--cyan);margin:0 0 8px 8px}.track{height:7px;background:#07111a;border-radius:9px;overflow:hidden;margin-top:20px}.fill{height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .25s ease}
-.controls{margin-top:16px}.target-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.field label{display:flex;justify-content:space-between;color:var(--muted);font-size:.84rem;margin-bottom:8px}.field input[type=number]{width:92px;background:#07111a;color:var(--text);border:1px solid var(--line);border-radius:8px;padding:8px}.field input[type=range]{width:100%;accent-color:var(--cyan)}
-.actions{display:grid;grid-template-columns:2fr repeat(3,1fr);gap:10px;margin-top:20px}button{border:1px solid var(--line);border-radius:10px;background:#182839;color:var(--text);padding:12px 14px;font:700 .8rem system-ui;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}button:hover{filter:brightness(1.18)}button:active{transform:translateY(1px)}button.primary{background:var(--cyan);border-color:var(--cyan);color:#041116}button.stop{background:#401a22;border-color:#7f2c39;color:#ffadb4}button:disabled{opacity:.4;cursor:not-allowed}
-.jogs{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.jog-group{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.jog-title{grid-column:1/-1;color:var(--muted);font-size:.78rem}.log{margin-top:16px;color:var(--muted);font:13px ui-monospace,monospace;min-height:1.4em}.sensor-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}.hint{color:var(--muted);font-size:.88rem;line-height:1.45}.danger{color:var(--red)}
-@media(max-width:700px){.grid,.target-grid,.jogs,.sensor-actions{grid-template-columns:1fr}.actions{grid-template-columns:1fr 1fr}.actions .primary,.actions .stop{grid-column:span 1}.card{padding:16px}.shell{padding-top:18px}}
-</style>
-</head>
-<body><main class="shell">
-<header class="top"><div><div class="eyebrow">EasyComm control surface</div><h1>Satellite Rotator</h1></div><div id="status" class="status"><span class="dot"></span><span id="statusText">Connecting</span></div></header>
-<section class="grid">
-<article class="card"><div class="readout"><div><div class="label">Azimuth</div><span id="azNow" class="angle">---.-</span><span class="unit">deg</span></div></div><div class="track"><div id="azFill" class="fill"></div></div></article>
-<article class="card"><div class="readout"><div><div class="label">Elevation</div><span id="elNow" class="angle">---.-</span><span class="unit">deg</span></div></div><div class="track"><div id="elFill" class="fill"></div></div></article>
-</section>
-<section class="card controls">
-<div class="target-grid">
-<div class="field"><label><span>Target azimuth</span><input id="azTarget" type="number" min="0" max="359" step="0.1" value="0.0"></label><input id="azSlider" type="range" min="0" max="359" step="0.1" value="0"></div>
-<div class="field"><label><span>Target elevation</span><input id="elTarget" type="number" min="0" max="180" step="0.1" value="0.0"></label><input id="elSlider" type="range" min="0" max="180" step="0.1" value="0"></div>
-</div>
-<div class="actions"><button class="primary" data-control id="move">Move</button><button class="stop" data-control id="stop">Stop</button><button data-control id="zero">Zero here</button><button data-control id="park">Park 0/0</button></div>
-<div class="jogs"><div class="jog-group"><div class="jog-title">Azimuth jog</div><button data-control data-axis="az" data-delta="-5">-5</button><button data-control data-axis="az" data-delta="-1">-1</button><button data-control data-axis="az" data-delta="1">+1</button><button data-control data-axis="az" data-delta="5">+5</button></div><div class="jog-group"><div class="jog-title">Elevation jog</div><button data-control data-axis="el" data-delta="-5">-5</button><button data-control data-axis="el" data-delta="-1">-1</button><button data-control data-axis="el" data-delta="1">+1</button><button data-control data-axis="el" data-delta="5">+5</button></div></div>
-<div id="log" class="log">Waiting for EasyComm listener...</div>
-</section>
-<section class="card controls">
-<div class="label">Sensor diagnostics</div>
-<p class="hint">Use Sensor Test to verify WT901 feedback. Level/Accel calibration requires the sensor to be level and motionless. Magnetic calibration starts collection; rotate the sensor around all axes, then press Finish/Save.</p>
-<div class="sensor-actions">
-<button data-control id="sensorTest">Sensor Test</button>
-<button data-control id="calAccel">Level/Accel Cal</button>
-<button data-control id="magStart">Mag Cal Start</button>
-<button data-control id="magFinish">Mag Finish/Save</button>
-</div>
-</section>
-</main>
-<script>
-const $=id=>document.getElementById(id);let current={azimuth:0,elevation:0},busy=false;
-function sync(a,b){$(a).addEventListener('input',()=>$(b).value=$(a).value);$(b).addEventListener('input',()=>$(a).value=$(b).value)}sync('azTarget','azSlider');sync('elTarget','elSlider');
-function connected(ok,msg){$('status').className='status '+(ok?'online':'offline');$('statusText').textContent=ok?'EasyComm online':'Offline';document.querySelectorAll('[data-control]').forEach(x=>x.disabled=!ok||busy);$('log').textContent=msg||'';$('log').className='log '+(ok?'':'danger')}
-async function api(path,method='GET'){const r=await fetch(path,{method,cache:'no-store'});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||('HTTP '+r.status));return j}
-function statusLine(j){if(j.sensor_maintenance)return 'Sensor maintenance: '+(j.sensor_maintenance_reason||'in progress');if(j.fault)return 'FAULT: '+(j.fault_reason||'unknown');let s=j.moving?'Moving':'Idle';if(j.external_feedback){s+=' | sensor '+(j.feedback_received?(j.feedback_age_ms+' ms old'):'waiting for first frame');}return s+' | backend '+j.backend}
-async function refresh(){try{const j=await api('/api/status');current=j;$('azNow').textContent=j.azimuth.toFixed(1);$('elNow').textContent=j.elevation.toFixed(1);$('azFill').style.width=(j.azimuth/359*100)+'%';$('elFill').style.width=(j.elevation/180*100)+'%';connected(!j.fault,statusLine(j))}catch(e){connected(false,e.message)}}
-async function command(path,label){busy=true;connected(true,label);try{await api(path,'POST');await refresh()}catch(e){connected(false,e.message)}finally{busy=false;document.querySelectorAll('[data-control]').forEach(x=>x.disabled=$('status').classList.contains('offline'))}}
-$('move').onclick=()=>command('/api/move?az='+encodeURIComponent($('azTarget').value)+'&el='+encodeURIComponent($('elTarget').value),'Sending EasyComm target...');
-$('stop').onclick=()=>command('/api/stop','Sending stop...');
-$('park').onclick=()=>command('/api/park','Sending park target...');
-$('zero').onclick=()=>{if(confirm('Set the current sensor position to azimuth 0 and elevation 0?'))command('/api/zero','Zeroing current position...')};
-$('sensorTest').onclick=async()=>{busy=true;connected(true,'Testing WT901 sensor...');try{const j=await api('/api/sensor/test','POST');current=j;const streamOk=j.sensor_stream_received&&j.sensor_stream_age_ms<1500;const mappedOk=j.feedback_received&&!j.feedback_stale&&!j.fault;const msg=(streamOk?'Sensor Stream OK':'Sensor Stream FAULT')+' | stream '+(j.sensor_stream_received?(j.sensor_stream_age_ms+' ms old'):'waiting')+' | mapped '+(mappedOk?'OK':(j.fault_reason||'not valid'))+' | az '+j.azimuth.toFixed(1)+' el '+j.elevation.toFixed(1)+' | backend '+j.motor_backend;connected(streamOk,msg);}catch(e){connected(false,e.message)}finally{busy=false;document.querySelectorAll('[data-control]').forEach(x=>x.disabled=$('status').classList.contains('offline'))}};
-$('calAccel').onclick=()=>{if(confirm('Keep the WT901 level and motionless. Start accelerometer calibration now?'))command('/api/sensor/calibrate-accel','Starting WT901 accelerometer calibration...')};
-$('magStart').onclick=()=>{if(confirm('Start magnetic calibration? After pressing OK, slowly rotate the sensor around all axes, then press Mag Finish/Save.'))command('/api/sensor/calibrate-magnetic-start','Starting WT901 magnetic calibration...')};
-$('magFinish').onclick=()=>command('/api/sensor/calibrate-magnetic-finish','Saving WT901 magnetic calibration...');
-document.querySelectorAll('[data-axis]').forEach(b=>b.onclick=()=>{let az=current.azimuth,el=current.elevation,d=Number(b.dataset.delta);if(b.dataset.axis==='az')az=(az+d+360)%360;else el=Math.max(0,Math.min(180,el+d));$('azTarget').value=$('azSlider').value=az.toFixed(1);$('elTarget').value=$('elSlider').value=el.toFixed(1);command('/api/move?az='+az.toFixed(1)+'&el='+el.toFixed(1),'Sending jog...')});
-refresh();setInterval(refresh,750);
-</script></body></html>)HTML";
+
+
+std::optional<std::string> read_text_asset(std::string_view asset_name) {
+    if (asset_name.empty() || asset_name.find("..") != std::string_view::npos ||
+        asset_name.find('\\') != std::string_view::npos || asset_name.front() == '/') {
+        return std::nullopt;
+    }
+    const std::array<std::filesystem::path, 4> roots{
+        std::filesystem::path{"/opt/pi-satellite-rotator/web"},
+        std::filesystem::path{"/src/web"},
+        std::filesystem::path{"web"},
+        std::filesystem::path{"../web"},
+    };
+    for (const auto& root : roots) {
+        std::ifstream input(root / std::string(asset_name), std::ios::binary);
+        if (!input) { continue; }
+        std::ostringstream body;
+        body << input.rdbuf();
+        return body.str();
+    }
+    return std::nullopt;
+}
+
+std::string_view web_content_type(std::string_view asset_name) {
+    if (asset_name.ends_with(".css")) { return "text/css; charset=utf-8"; }
+    if (asset_name.ends_with(".js")) { return "application/javascript; charset=utf-8"; }
+    return "text/html; charset=utf-8";
+}
 
 struct HttpRequest {
     std::string method;
@@ -128,7 +94,7 @@ void http_response(int client, int status, std::string_view content_type,
              << "Content-Length: " << body.size() << "\r\n"
              << "Cache-Control: no-store\r\n"
              << "X-Content-Type-Options: nosniff\r\n"
-             << "Content-Security-Policy: default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\r\n"
+             << "Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'\r\n"
              << "Connection: close\r\n\r\n" << body;
     send_all(client, response.str());
 }
@@ -260,11 +226,30 @@ void api_error(int client, const std::exception& error) {
                   "{\"ok\":false,\"error\":\"" + json_escape(error.what()) + "\"}");
 }
 
+
+bool serve_web_asset(int client, std::string_view target) {
+    std::string_view asset_name;
+    if (target == "/" || target == "/index.html") {
+        asset_name = "index.html";
+    } else if (target == "/static/app.css") {
+        asset_name = "app.css";
+    } else if (target == "/static/app.js") {
+        asset_name = "app.js";
+    } else {
+        return false;
+    }
+    if (const auto body = read_text_asset(asset_name)) {
+        http_response(client, 200, web_content_type(asset_name), *body);
+    } else {
+        http_response(client, 404, "application/json", "{\"ok\":false,\"error\":\"web asset not installed\"}");
+    }
+    return true;
+}
+
 void handle_request(int client, const HttpRequest& request, const std::string& host,
                     std::uint16_t port) {
     try {
-        if (request.method == "GET" && (request.target == "/" || request.target == "/index.html")) {
-            http_response(client, 200, "text/html; charset=utf-8", std::string(page));
+        if (request.method == "GET" && serve_web_asset(client, request.target)) {
             return;
         }
         if (request.method == "GET" && request.target == "/api/status") {
