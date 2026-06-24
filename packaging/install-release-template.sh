@@ -3,8 +3,10 @@ set -euo pipefail
 
 START_SERVICE=0
 ENABLE_SERVICE=1
-SELF_CHECK=0
-ARTIFACT_DIR="dist"
+
+PACKAGE_ARCH="%PACKAGE_ARCH%"
+EXPECTED_UNAME_REGEX="%EXPECTED_UNAME_REGEX%"
+EXPECTED_FILE_REGEX="%EXPECTED_FILE_REGEX%"
 
 pass() { printf 'PASS: %s\n' "$1"; }
 fail() { printf 'FAIL: %s\nFINAL RESULT: FAIL\n' "$1" >&2; exit 1; }
@@ -13,67 +15,34 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --start) START_SERVICE=1 ;;
     --no-enable) ENABLE_SERVICE=0 ;;
-    --self-check) SELF_CHECK=1 ;;
-    --artifact-dir) shift; [[ $# -gt 0 ]] || fail "--artifact-dir requires a path"; ARTIFACT_DIR="$1" ;;
     *) fail "unknown option: $1" ;;
   esac
   shift
 done
 
-repo_root="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$repo_root"
+package_root="$(cd "$(dirname "$0")" && pwd)"
+cd "$package_root"
 
-[[ -f CMakeLists.txt && -d scripts && -d packaging && -d config ]] || fail "run from PI-SATELLITE-ROTATOR repository root"
-pass "repository root verified"
-
-[[ -f "$ARTIFACT_DIR/pi-satellite-rotator" ]] || fail "missing $ARTIFACT_DIR/pi-satellite-rotator; run the matching build script first"
-pass "$ARTIFACT_DIR/pi-satellite-rotator exists"
-
-[[ -f "$ARTIFACT_DIR/witmotion-tool" ]] || fail "missing $ARTIFACT_DIR/witmotion-tool; run the matching build script first"
-pass "$ARTIFACT_DIR/witmotion-tool exists"
-
-pi_bin_info="$(file "$ARTIFACT_DIR/pi-satellite-rotator")"
-wit_bin_info="$(file "$ARTIFACT_DIR/witmotion-tool")"
-printf "%s\n%s\n" "$pi_bin_info" "$wit_bin_info"
-if echo "$pi_bin_info" | grep -Eq "ELF 64-bit.*(ARM aarch64|aarch64)|ARM aarch64"; then
-  ARTIFACT_ARCH="rpi64-aarch64"
-elif echo "$pi_bin_info" | grep -Eq "ELF 32-bit.*ARM"; then
-  ARTIFACT_ARCH="rpi-zero-32-armv6"
-else
-  fail "$ARTIFACT_DIR/pi-satellite-rotator has an unsupported architecture"
-fi
-pass "pi-satellite-rotator artifact architecture detected: $ARTIFACT_ARCH"
-
-[[ -f packaging/pi-satellite-rotator.service ]] || fail "missing packaging/pi-satellite-rotator.service"
-pass "systemd service template exists"
-
-[[ -f config/pi-satellite-rotator.env.example ]] || fail "missing config/pi-satellite-rotator.env.example"
-pass "environment example exists"
-
-[[ -f web/index.html && -f web/app.css && -f web/app.js ]] || fail "missing web assets under web/"
-pass "web assets exist"
-
-if [[ "$SELF_CHECK" -eq 1 ]]; then
-  pass "installer self-check completed"
-  echo "FINAL RESULT: PASS"
-  exit 0
-fi
+[[ -f bin/pi-satellite-rotator ]] || fail "missing bin/pi-satellite-rotator"
+[[ -f bin/witmotion-tool ]] || fail "missing bin/witmotion-tool"
+[[ -f packaging/pi-satellite-rotator.service ]] || fail "missing systemd service file"
+[[ -f config/pi-satellite-rotator.env.example ]] || fail "missing environment example"
+[[ -f web/index.html && -f web/app.css && -f web/app.js ]] || fail "missing web assets"
+pass "release package layout verified: $PACKAGE_ARCH"
 
 [[ "$(uname -s)" == "Linux" ]] || fail "installer must run on Linux/Raspberry Pi OS"
-pass "Linux host verified"
-
 arch="$(uname -m)"
-case "$ARTIFACT_ARCH:$arch" in
-  rpi64-aarch64:aarch64|rpi64-aarch64:arm64)
-    pass "64-bit Raspberry Pi host verified: $arch"
-    ;;
-  rpi-zero-32-armv6:armv6l|rpi-zero-32-armv6:armv7l)
-    pass "32-bit Raspberry Pi host verified: $arch"
-    ;;
-  *)
-    fail "artifact $ARTIFACT_ARCH is not compatible with host architecture $arch"
-    ;;
-esac
+if [[ ! "$arch" =~ $EXPECTED_UNAME_REGEX ]]; then
+  fail "this package is for $PACKAGE_ARCH; detected uname -m=$arch"
+fi
+pass "host architecture accepted: $arch"
+
+bin_info="$(file bin/pi-satellite-rotator)"
+printf '%s\n' "$bin_info"
+if [[ ! "$bin_info" =~ $EXPECTED_FILE_REGEX ]]; then
+  fail "binary architecture does not match package $PACKAGE_ARCH"
+fi
+pass "binary architecture verified"
 
 if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
   if command -v sudo >/dev/null 2>&1; then
@@ -97,12 +66,14 @@ else
   pass "service user created: $install_user"
 fi
 
-if getent group dialout >/dev/null 2>&1; then
-  usermod -a -G dialout,gpio "$install_user"
-  pass "service user added to dialout group"
-else
-  pass "dialout group not present; skipped supplementary group assignment"
-fi
+for group in dialout gpio; do
+  if getent group "$group" >/dev/null 2>&1; then
+    usermod -a -G "$group" "$install_user"
+    pass "service user added to $group group"
+  else
+    pass "$group group not present; skipped supplementary group assignment"
+  fi
+done
 
 install -d -m 0755 "$install_root/bin"
 install -d -m 0755 "$install_root/web"
@@ -112,8 +83,8 @@ install -d -m 0755 "$log_root"
 chown "$install_user:$install_user" "$state_root" "$log_root"
 pass "install/config/state/log directories prepared"
 
-install -m 0755 "$ARTIFACT_DIR/pi-satellite-rotator" "$install_root/bin/pi-satellite-rotator"
-install -m 0755 "$ARTIFACT_DIR/witmotion-tool" "$install_root/bin/witmotion-tool"
+install -m 0755 bin/pi-satellite-rotator "$install_root/bin/pi-satellite-rotator"
+install -m 0755 bin/witmotion-tool "$install_root/bin/witmotion-tool"
 pass "binaries installed under $install_root/bin"
 
 install -m 0644 web/index.html web/app.css web/app.js "$install_root/web/"

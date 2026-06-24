@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-source scripts/docker-common.sh
-mkdir -p dist
-"$DOCKER" build --target artifact --output type=local,dest=dist .
+./scripts/build-rpi64.sh
+cp -f dist/rpi64/pi-satellite-rotator dist/pi-satellite-rotator
+cp -f dist/rpi64/witmotion-tool dist/witmotion-tool
 file dist/pi-satellite-rotator
 file dist/witmotion-tool

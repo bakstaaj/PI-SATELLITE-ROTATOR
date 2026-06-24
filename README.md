@@ -78,3 +78,22 @@ The web UI includes Sensor Test, Level/Accel Calibration, and Magnetic Calibrati
 Current validated bench mapping for the WT901 is `--az-axis yaw --az-offset 270.00 --el-axis roll --el-offset 14.60`, with no `--el-invert`. Keep `--motor-backend simulator` until the rotator is mechanically assembled and the limit-switch true-zero workflow is added.
 
 Measured elevation feedback may go negative before the lower limit switch establishes true zero. Commanded target elevation remains constrained to `0..180` degrees.
+
+
+## Multi-architecture release packages
+
+Build both Raspberry Pi release packages from Docker:
+
+```bash
+scripts/build-release-packages.sh
+```
+
+This creates separate tarballs under `dist/releases/` for 64-bit aarch64 Raspberry Pi OS and 32-bit ARMv6 Raspberry Pi Zero W. Each tarball includes its own `install.sh`.
+
+Upload packages to a GitHub release with:
+
+```bash
+scripts/upload-release-packages.sh vX.Y.Z
+```
+
+See `docs/release-packaging.md` for details.
