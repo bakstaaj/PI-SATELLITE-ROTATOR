@@ -52,6 +52,8 @@ int main() {
             "sensor magnetic finish command");
     require(parse_easycomm("SA SE").kind == CommandKind::stop, "stop command");
     require(parse_easycomm("ZERO").kind == CommandKind::zero, "zero command");
+    require(parse_easycomm("ZERO AZ").kind == CommandKind::zero_azimuth,
+            "azimuth-only zero command");
     require(parse_easycomm("PARK").kind == CommandKind::park, "park command");
     require(parse_easycomm("AZnope").kind == CommandKind::invalid, "reject malformed value");
     require(parse_easycomm("AZ1 AZ2").error == "duplicate axis token",
@@ -86,8 +88,26 @@ int main() {
             "zero offsets external feedback");
     require(controller.set_target(140.0, 45.0, error), "set moving target before zero test");
     require(!controller.zero_current_position(), "reject zero while moving");
+    require(!controller.zero_current_azimuth(),
+            "reject azimuth-only zero while moving");
     controller.stop();
     require(controller.zero_current_position(), "allow zero after stop");
+
+    RotatorController az_zero_controller;
+    az_zero_controller.enable_external_feedback();
+    require(az_zero_controller.update_feedback(10.0, 10.0),
+            "seed azimuth-only zero baseline");
+    require(az_zero_controller.zero_current_position(),
+            "zero azimuth-only test baseline");
+    require(az_zero_controller.update_feedback(25.0, 55.0),
+            "seed stopped azimuth-only zero feedback");
+    require(std::abs(az_zero_controller.position().azimuth - 15.0) < 0.01 &&
+                std::abs(az_zero_controller.position().elevation - 45.0) < 0.01,
+            "azimuth-only zero test starts with non-zero mapped position");
+    require(az_zero_controller.zero_current_azimuth(), "zero azimuth only");
+    require(az_zero_controller.position().azimuth == 0.0 &&
+                std::abs(az_zero_controller.position().elevation - 45.0) < 0.01,
+            "azimuth-only zero preserves elevation");
 
 
     RotatorController sensor_command_controller;

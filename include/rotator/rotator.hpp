@@ -52,6 +52,7 @@ public:
     ControllerStatus status() const;
     void stop();
     bool zero_current_position();
+    bool zero_current_azimuth();
     void enable_external_feedback();
     void set_feedback_timeout(std::chrono::milliseconds timeout);
     void set_motor_driver(std::shared_ptr<MotorDriver> driver);

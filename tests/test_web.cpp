@@ -126,6 +126,15 @@ int main() {
     const auto zeroed = request(web_port, "GET", "/api/status");
     require(zeroed.find("\"azimuth\":0.0") != std::string::npos, "zeroed azimuth");
 
+    request(web_port, "POST", "/api/move?az=90&el=25");
+    require(request(web_port, "POST", "/api/zero/az").find("200 OK") != std::string::npos,
+            "azimuth-only zero endpoint");
+    const auto az_zeroed = request(web_port, "GET", "/api/status");
+    require(az_zeroed.find("\"azimuth\":0.0") != std::string::npos,
+            "azimuth-only zeroed azimuth");
+    require(az_zeroed.find("\"elevation\":25.0") != std::string::npos,
+            "azimuth-only zero preserved elevation");
+
     request(web_port, "POST", "/api/move?az=50&el=30");
     require(request(web_port, "POST", "/api/park").find("200 OK") != std::string::npos,
             "park endpoint");

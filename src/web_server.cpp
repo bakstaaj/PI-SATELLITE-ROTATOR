@@ -307,6 +307,11 @@ void handle_request(int client, const HttpRequest& request, const std::string& h
             http_response(client, 200, "application/json", "{\"ok\":true}");
             return;
         }
+        if (request.method == "POST" && request.target == "/api/zero/az") {
+            require_easycomm_ok(connect_easycomm(host, port, "ZERO AZ\n", true));
+            http_response(client, 200, "application/json", "{\"ok\":true}");
+            return;
+        }
         if (request.method == "POST" && request.target == "/api/park") {
             require_easycomm_ok(connect_easycomm(host, port, "PARK\n", true));
             http_response(client, 200, "application/json", "{\"ok\":true}");

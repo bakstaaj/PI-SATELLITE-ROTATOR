@@ -16,6 +16,7 @@ enum class CommandKind {
     sensor_calibrate_magnetic_finish,
     stop,
     zero,
+    zero_azimuth,
     park,
     invalid
 };

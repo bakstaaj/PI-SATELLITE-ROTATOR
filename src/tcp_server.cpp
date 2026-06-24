@@ -124,6 +124,11 @@ std::string execute(std::string_view line, RotatorController& controller) {
                 return "ERR stop motion and obtain valid feedback before zeroing\r\n";
             }
             return "OK ZERO\r\n";
+        case CommandKind::zero_azimuth:
+            if (!controller.zero_current_azimuth()) {
+                return "ERR stop motion and obtain valid feedback before zeroing azimuth\r\n";
+            }
+            return "OK ZERO AZ\r\n";
         case CommandKind::park: {
             std::string error;
             if (!controller.set_target(0.0, 0.0, error)) {

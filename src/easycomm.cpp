@@ -46,6 +46,10 @@ Command parse_easycomm(std::string_view line) {
     if (text == "ZERO") {
         return {CommandKind::zero, std::nullopt, std::nullopt, {}};
     }
+    if (text == "ZERO AZ" || text == "ZERO AZIMUTH" || text == "AZ ZERO" ||
+        text == "SET NORTH") {
+        return {CommandKind::zero_azimuth, std::nullopt, std::nullopt, {}};
+    }
     if (text == "PARK") {
         return {CommandKind::park, std::nullopt, std::nullopt, {}};
     }

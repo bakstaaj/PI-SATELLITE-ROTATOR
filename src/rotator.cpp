@@ -127,6 +127,24 @@ bool RotatorController::zero_current_position() {
     return true;
 }
 
+bool RotatorController::zero_current_azimuth() {
+    std::lock_guard lock(mutex_);
+    const auto now = std::chrono::steady_clock::now();
+    if (state_.moving || (external_feedback_ && !feedback_received_) ||
+        sensor_maintenance_locked(now) || feedback_stale_locked(now)) {
+        return false;
+    }
+    motion_commanded_ = false;
+    stop_motor_locked();
+    if (external_feedback_) {
+        feedback_zero_.azimuth = raw_feedback_.azimuth;
+    }
+    state_.azimuth = 0.0;
+    state_.moving = false;
+    target_ = state_;
+    return true;
+}
+
 void RotatorController::enable_external_feedback() {
     std::lock_guard lock(mutex_);
     external_feedback_ = true;
