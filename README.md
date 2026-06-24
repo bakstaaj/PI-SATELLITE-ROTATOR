@@ -88,7 +88,7 @@ Build both Raspberry Pi release packages from Docker:
 scripts/build-release-packages.sh
 ```
 
-This creates separate tarballs under `dist/releases/` for 64-bit aarch64 Raspberry Pi OS and 32-bit ARMv6 Raspberry Pi Zero W. Each tarball includes its own `install.sh`.
+This creates separate tarballs under `dist/releases/` for 64-bit aarch64 Raspberry Pi OS and 32-bit ARMv6 Raspberry Pi Zero W. Each tarball includes its own `install.sh`. The Pi Zero W package is built inside an ARMv6 Raspberry-Pi-compatible Docker target so it does not emit ARMv7/Thumb-2 binaries.
 
 Upload packages to a GitHub release with:
 

@@ -9,7 +9,7 @@ The project builds two Docker cross-compiled release packages:
 2. `rpi-zero-32-armv6`
    - Target: Raspberry Pi Zero W running 32-bit Raspberry Pi OS / Trixie Lite.
    - Build script: `scripts/build-rpi-zero-32.sh`.
-   - Toolchain: `arm-linux-gnueabihf-g++` with `-march=armv6 -marm -mfpu=vfp -mfloat-abi=hard`. `-marm` is required because Thumb-1 does not support the hard-float VFP ABI.
+   - Build method: Docker target build inside `balenalib/raspberry-pi-debian:bookworm-build`, which avoids Debian's generic ARMv7/Thumb-2 `armhf` cross-toolchain output.
 
 Build both packages:
 
@@ -41,3 +41,5 @@ sudo ./install.sh --start
 Safety default: keep `PI_SATELLITE_ROTATOR_ARGS` configured with `--motor-backend simulator` until mechanical assembly, limit switches, and zeroing have been validated.
 
 Release installer templating uses Python string replacement so architecture regex values may safely contain `|` alternation.
+
+The Pi Zero W package must not advertise `Tag_CPU_arch: v7` or `Tag_THUMB_ISA_use: Thumb-2`; those attributes indicate an executable that can crash immediately on the original ARMv6 Pi Zero W.

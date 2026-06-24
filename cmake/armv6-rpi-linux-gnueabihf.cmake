@@ -1,3 +1,13 @@
+# Historical/reference ARMv6 toolchain file.
+#
+# The original Pi Zero W release package is intentionally built inside the
+# ARMv6 Raspberry-Pi-compatible Docker target stage instead of using Debian's
+# generic arm-linux-gnueabihf cross compiler. Debian armhf is ARMv7/Thumb-2
+# oriented and produced binaries that segfaulted on armv6l.
+#
+# This file is retained for reference, but scripts/build-rpi-zero-32.sh now
+# uses the Dockerfile rpi-zero-32-cross-build target.
+
 set(CMAKE_SYSTEM_NAME Linux)
 set(CMAKE_SYSTEM_PROCESSOR arm)
 
